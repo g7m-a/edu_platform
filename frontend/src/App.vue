@@ -1,20 +1,25 @@
+<template>
+  <router-view></router-view>
+</template>
+
 <script setup>
-import { ref, onMounted } from 'vue'
-
-const message = ref('加载中...')
-
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/')
-    message.value = await res.text()
-  } catch (err) {
-    message.value = '后端未连接: ' + err.message
-  }
-})
 </script>
 
-<template>
-  <div style="font-family: sans-serif; padding: 30px;">
-    <h1>{{ message }}</h1>
-  </div>
-</template>
+<style scoped>
+.login, .register {
+  margin: 20px;
+  padding: 20px;
+  border: 1px solid #ccc;
+  max-width: 300px;
+}
+input {
+  width: 100%;
+  margin: 8px 0;
+  padding: 8px;
+}
+button {
+  margin-top: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+</style>
