@@ -1,0 +1,23 @@
+{
+  "name": "edu_platform",
+  "version": "1.0.0",
+  "description": "��#\u0000 \u0000T\u0000e\u0000a\u0000c\u0000h\u0000e\u0000r\u0000-\u0000S\u0000t\u0000u\u0000d\u0000e\u0000n\u0000t\u0000 \u0000P\u0000l\u0000a\u0000t\u0000f\u0000o\u0000r\u0000m\u0000\r\u0000 \u0000",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/g7m-a/edu_platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/g7m-a/edu_platform/issues"
+  },
+  "homepage": "https://github.com/g7m-a/edu_platform#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

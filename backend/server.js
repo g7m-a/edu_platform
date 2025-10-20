@@ -1,4 +1,5 @@
 require('dotenv').config();
+const userRoutes=require('./routes/userRoutes');
 const express = require('express');
 const cors = require('cors');
 const healthRoutes = require('./routes/healthRoutes');
@@ -7,6 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/health', healthRoutes);
+app.use('/api/users',userRoutes);
 
 // 根路由（用于简单的连通性检查）
 app.get('/', (req, res) => {

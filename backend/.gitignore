@@ -1,0 +1,8 @@
+# Ignore local test scripts
+test-db.js
+
+# Node modules
+node_modules/
+
+# Env
+.env
