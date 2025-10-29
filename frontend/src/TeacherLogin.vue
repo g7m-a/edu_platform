@@ -50,6 +50,7 @@ const handleLogin = async () => {
     router.push('/TeacherHomePage');
     alert('工号和密码不能为空');
   }
+  //应当在此处进行后端查询判断是否登录成功
 };
 </script>
 
@@ -157,3 +158,4 @@ const handleLogin = async () => {
   text-decoration: underline;
 }
 </style>
+
