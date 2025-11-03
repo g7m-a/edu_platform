@@ -4,8 +4,13 @@ import StudentLogin from '../StudentLogin.vue';
 import StudentRegister from '../StudentRegister.vue';
 import TeacherLogin from '../TeacherLogin.vue';
 import TeacherRegister from '../TeacherRegister.vue';
+import AdminLogin from '../AdminLogin.vue';
 import TeacherHomePage from '../TeacherHomePage.vue';
 import StudentHomePage from '../StudentHomePage.vue';
+import AdminHomePage from '../AdminHomePage.vue';
+import StudentManagePage from '../StudentManagePage.vue';
+import TeacherManagePage from '../TeacherManagePage.vue';
+import CourseManagePage from '../CourseManagePage.vue';
 
 const routes = [
   { path: '/', redirect: '/Entry' },
@@ -14,8 +19,13 @@ const routes = [
   { path: '/student-register', component: StudentRegister },
   { path: '/teacher-login', component: TeacherLogin },
   { path: '/teacher-register', component: TeacherRegister },
-  { path: '/StudentHomePage', component: StudentHomePage },
-  { path: '/TeacherHomePage', component: TeacherHomePage }
+  { path: '/admin-login', component: AdminLogin },
+  { path: '/student-homepage', component: StudentHomePage },
+  { path: '/teacher-homepage', component: TeacherHomePage },
+  { path: '/admin-homepage', component: AdminHomePage },
+  { path: '/teachermanage-page', component: TeacherManagePage },
+  { path: '/studentmanage-page', component: StudentManagePage },
+  { path: '/coursemanage-page', component: CourseManagePage }
 ];
 
 const router = createRouter({
