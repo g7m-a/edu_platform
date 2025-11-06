@@ -10,7 +10,6 @@
         <label>院系筛选：</label>
         <select v-model="filterDept" class="filter-input" @change="handleFilter">
           <option value="">全部院系</option>
-          <!-- 改为数据库内所有院系 -->
           <option value="计算机学院">计算机学院</option>
           <option value="电子信息学院">电子信息学院</option>
           <option value="文学院">文学院</option>
@@ -40,23 +39,13 @@
       </div>
 
       <div class="filter-item">
-        <label>教授课程：</label>
-        <select 
-          v-model="filterCourses" 
-          class="filter-input" 
-          multiple
-          @change="handleFilter"
-        >
-          <option value="">全部课程</option>
-          <!-- 改为数据库内不重复的课程名 -->
-          <option value="数据结构">数据结构</option>
-          <option value="算法分析">算法分析</option>
-          <option value="电路原理">电路原理</option>
-          <option value="中国古代文学">中国古代文学</option>
-          <option value="现代汉语">现代汉语</option>
-          <option value="高等数学">高等数学</option>
-        </select>
-        <p class="filter-hint">按住Ctrl键可多选</p>
+        <label>教授课程搜索：</label>
+        <input
+          v-model="filterCourses"
+          placeholder="输入教授课程搜索"
+          class="filter-input"
+          @input="handleFilter"
+        />
       </div>
     </div>
 
@@ -74,17 +63,24 @@
         </thead>
         <tbody>
           <tr v-for="teacher in filteredteachers" :key="teacher.id">
-            <!-- 这里遍历显示系统内所有教师 -->
             <td>{{ teacher.id }}</td>
             <td>{{ teacher.name }}</td>
             <td>{{ teacher.gender }}</td>
             <td>{{ teacher.dept }}</td>
             <td>
-              {{ teacher.courses.join('，') }}
+              {{ teacher.courses.length > 0 ? teacher.courses.join('，') : '无' }}
             </td>
             <td class="operate-btn-group">
               <button @click="openEditModal(teacher)" class="edit-btn">编辑</button>
-              <button @click="deleteteacher(teacher.id)" class="delete-btn">删除</button>
+              <!-- 有课程时禁用删除按钮并添加提示 -->
+              <button 
+                @click="showDeleteConfirm(teacher.id)" 
+                class="delete-btn"
+                :disabled="teacher.courses.length > 0"
+                :title="teacher.courses.length > 0 ? '该教师有授课，禁止删除' : '删除教师'"
+              >
+                删除
+              </button>
             </td>
           </tr>
           <tr v-if="filteredteachers.length === 0">
@@ -140,27 +136,34 @@
             </select>
           </div>
 
-          <div class="form-item">
+          <div class="form-item" v-if="isEditMode">
             <label>教授课程：</label>
-            <select 
-              v-model="formData.courses" 
-              class="form-control"
-              :disabled="true"
-              multiple
-            >
-              <option value="数据结构">数据结构</option>
-              <option value="算法分析">算法分析</option>
-              <option value="电路原理">电路原理</option>
-              <option value="中国古代文学">中国古代文学</option>
-              <option value="现代汉语">现代汉语</option>
-              <option value="高等数学">高等数学</option>
-            </select>
-            <p class="filter-hint">如需更改请在课程管理界面更改</p>
+            <div class="course-display">
+              {{ formData.courses.length > 0 ? formData.courses.join('，') : '无' }}
+            </div>
+            <p class="filter-hint">如需更改请在课程管理界面操作</p>
           </div>
         </div>
         <div class="modal-footer">
           <button @click="closeModal" class="cancel-btn">取消</button>
           <button @click="submitForm" class="confirm-btn">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-mask" v-if="isDeleteModalOpen">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>确认删除教师</h3>
+          <button @click="closeDeleteModal" class="close-btn">×</button>
+        </div>
+        <div class="modal-form">
+          <p class="delete-tip">确认删除该教师？</p>
+          <!-- 移除接手教师输入相关内容 -->
+        </div>
+        <div class="modal-footer">
+          <button @click="closeDeleteModal" class="cancel-btn">取消</button>
+          <button @click="confirmDelete" class="confirm-btn delete-confirm-btn">确认删除</button>
         </div>
       </div>
     </div>
@@ -211,7 +214,7 @@ export default {
       filterDept: '',
       filterId: '',
       filterName: '',
-      filterCourses: [],
+      filterCourses: '',
       filteredteachers: [],
       isModalOpen: false,
       isEditMode: false,
@@ -223,6 +226,8 @@ export default {
         courses: []
       },
       idError: '',
+      isDeleteModalOpen: false,
+      deleteTeacherId: '' // 仅保留待删除教师ID，移除课程和接手教师相关字段
     };
   },
   mounted() {
@@ -237,16 +242,17 @@ export default {
       }
 
       if (this.filterId) {
-        result = result.filter(teacher => teacher.id.includes(this.filterId));
+        result = result.filter(teacher => teacher.id === this.filterId);
       }
 
       if (this.filterName) {
-        result = result.filter(teacher => teacher.name.includes(this.filterName));
+        result = result.filter(teacher => teacher.name === this.filterName);
       }
 
-      if (this.filterCourses.length > 0 && !this.filterCourses.includes('')) {
+      if (this.filterCourses) {
+        const searchCourse = this.filterCourses.trim();
         result = result.filter(teacher => 
-          this.filterCourses.some(course => teacher.courses.includes(course))
+          teacher.courses.some(course => course.includes(searchCourse))
         );
       }
 
@@ -278,13 +284,15 @@ export default {
     },
 
     submitForm() {
-      if (!this.formData.id || !this.formData.name) {
+      const { id, name } = this.formData;
+
+      if (!id || !name) {
         alert('工号、姓名不能为空！');
         return;
       }
 
       if (!this.isEditMode) {
-        const isDuplicate = this.teachers.some(teacher => teacher.id === this.formData.id);
+        const isDuplicate = this.teachers.some(teacher => teacher.id === id);
         if (isDuplicate) {
           this.idError = '该工号已存在，请输入唯一工号！';
           return;
@@ -292,11 +300,19 @@ export default {
       }
 
       if (this.isEditMode) {
-        const index = this.teachers.findIndex(teacher => teacher.id === this.formData.id);
-        this.teachers[index] = { ...this.formData };
+        const index = this.teachers.findIndex(teacher => teacher.id === id);
+        this.teachers[index] = {
+          ...this.teachers[index],
+          name: this.formData.name,
+          gender: this.formData.gender,
+          dept: this.formData.dept
+        };
         alert('编辑成功！');
       } else {
-        this.teachers.push({ ...this.formData });
+        this.teachers.push({
+          ...this.formData,
+          courses: []
+        });
         alert('新增成功！');
       }
 
@@ -304,17 +320,32 @@ export default {
       this.closeModal();
     },
 
-    deleteteacher(id) {
-      if (confirm('确定要删除该教师吗？')) {
-        this.teachers = this.teachers.filter(teacher => teacher.id !== id);
-        this.handleFilter();
-        alert('删除成功！');
+    showDeleteConfirm(id) {
+      const teacher = this.teachers.find(t => t.id === id);
+      // 校验是否有课程，有则直接提示禁止删除
+      if (teacher.courses.length > 0) {
+        alert('该教师当前有授课任务，禁止删除！');
+        return;
       }
+      // 无课程则打开删除确认弹窗
+      this.deleteTeacherId = id;
+      this.isDeleteModalOpen = true;
     },
+
+    closeDeleteModal() {
+      this.isDeleteModalOpen = false;
+    },
+
+    confirmDelete() {
+      // 直接删除教师，无需处理课程转移
+      this.teachers = this.teachers.filter(teacher => teacher.id !== this.deleteTeacherId);
+      alert('删除成功！');
+      this.handleFilter();
+      this.closeDeleteModal();
+    }
   },
 };
 </script>
-
 
 <style scoped>
 .teacher-manage-container {
@@ -325,13 +356,15 @@ export default {
   bottom: 0;
   background-color: #f5f7fa;
   overflow: auto;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 10px 10px 10px 10px;
+  margin-bottom: 20px;
 }
 
 .page-header h2 {
@@ -398,12 +431,6 @@ export default {
   margin: 5px 0 0 0;
   font-size: 12px;
   color: #999;
-}
-
-.filter-input[multiple] {
-  height: auto;
-  min-height: 36px;
-  padding: 4px 12px;
 }
 
 .table-container {
@@ -474,7 +501,13 @@ export default {
   transition: background-color 0.3s ease;
 }
 
-.delete-btn:hover {
+/* 禁用状态样式 */
+.delete-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.delete-btn:hover:not(:disabled) {
   background-color: #c53030;
 }
 
@@ -545,6 +578,15 @@ export default {
   font-size: 14px;
 }
 
+.course-display {
+  padding: 10px 12px;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #333;
+}
+
 .form-control {
   padding: 10px 12px;
   border: 1px solid #ddd;
@@ -568,6 +610,13 @@ export default {
   color: #e53e3e;
   font-size: 12px;
   margin: 0;
+}
+
+.delete-tip {
+  color: #666;
+  font-size: 14px;
+  margin: 0 0 10px 0;
+  line-height: 1.5;
 }
 
 .modal-footer {
@@ -606,5 +655,13 @@ export default {
 
 .confirm-btn:hover {
   background-color: #359e6d;
+}
+
+.delete-confirm-btn {
+  background-color: #e53e3e;
+}
+
+.delete-confirm-btn:hover {
+  background-color: #c53030;
 }
 </style>

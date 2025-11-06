@@ -3,9 +3,6 @@
     <div class="home-content">
       <header class="page-header">
         <div class="current-time">{{ currentTime }}</div>
-        <div class="admin-info">
-          <span>{{ adminId }}</span>
-        </div>
       </header>
       <main class="main-content">
         <div class="content-area">
@@ -24,7 +21,6 @@
 export default {
   data() {
     return {
-      adminId: '01',
       currentTime: ''
     };
   },

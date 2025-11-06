@@ -32,6 +32,7 @@
 </template>
 
 <script>
+import axios from 'axios';
 export default {
   data() {
     return {
@@ -41,11 +42,31 @@ export default {
   },
   methods: {
     async handleLogin() {
-      if (this.account && this.password) {
-        alert('管理员登录成功');
-        this.$router.push('/admin-homepage');
-      } else {
+      if (!this.account || !this.password) {
         alert('工号和密码不能为空');
+        return;
+      }
+
+      try {
+        const response = await axios.post(
+          'http://localhost:3000/api/admin/login',
+          { 
+            account: this.account,
+            password: this.password
+          }
+        );
+
+        const { code, message } = response.data;
+        if (code === 200) {
+          alert(message || '登录成功');
+          localStorage.setItem('token', response.data.data.token);
+          this.$router.push('/admin-homepage');
+        } else {
+          alert(message || '登录失败');
+        }
+      } catch (error) {
+        console.error('登录请求失败：', error);
+        alert('网络错误或服务器异常，请稍后重试');
       }
     }
   }

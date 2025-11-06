@@ -10,34 +10,31 @@
         <label>院系筛选：</label>
         <select v-model="filterDept" class="filter-input" @change="handleFilter">
           <option value="">全部院系</option>
-          <!-- 需换为目前数据库内所有院系 -->
-          <option value="计算机学院">计算机学院</option>
-          <option value="电子信息学院">电子信息学院</option>
-          <option value="文学院">文学院</option>
-          <option value="理学院">理学院</option>
-          <option value="经管学院">经管学院</option>
+          <option v-for="dept in allDepts" :key="dept" :value="dept">
+            {{ dept }}
+          </option>
         </select>
       </div>
 
       <div class="filter-item">
         <label>年级搜索：</label>
         <select v-model="filterGrade" class="filter-input" @change="handleFilter">
-            <option value="">请选择年级</option>
-            <option value="2018">2018</option>
-            <option value="2019">2019</option>
-            <option value="2020">2020</option>
-            <option value="2021">2021</option>
-            <option value="2022">2022</option>
-            <option value="2023">2023</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
+          <option value="">请选择年级</option>
+          <option value="2018">2018</option>
+          <option value="2019">2019</option>
+          <option value="2020">2020</option>
+          <option value="2021">2021</option>
+          <option value="2022">2022</option>
+          <option value="2023">2023</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
         </select>
       </div>
 
       <div class="filter-item">
         <label>学号搜索：</label>
         <input
-          v-model="filterId"
+          v-model="filterAccount"
           placeholder="输入学号搜索"
           class="filter-input"
           @input="handleFilter"
@@ -69,7 +66,7 @@
         </thead>
         <tbody>
           <tr v-for="student in filteredStudents" :key="student.id">
-            <td>{{ student.id }}</td>
+            <td>{{ student.account }}</td>
             <td>{{ student.name }}</td>
             <td>{{ student.gender }}</td>
             <td>{{ student.dept }}</td>
@@ -124,11 +121,9 @@
           <div class="form-item">
             <label>院系：</label>
             <select v-model="formData.dept" class="form-control">
-              <option value="计算机学院">计算机学院</option>
-              <option value="电子信息学院">电子信息学院</option>
-              <option value="文学院">文学院</option>
-              <option value="理学院">理学院</option>
-              <option value="经管学院">经管学院</option>
+              <option v-for="dept in allDepts" :key="dept" :value="dept">
+                {{ dept }}
+              </option>
             </select>
           </div>
 
@@ -157,37 +152,65 @@
 </template>
 
 <script>
+import axios from 'axios';
 export default {
   data() {
     return {
-      students: [
-        { id: '2023001001', name: '张三', gender: '男', dept: '计算机学院', grade: '2023' },
-        { id: '2023002001', name: '李四', gender: '女', dept: '电子信息学院', grade: '2023' },
-        { id: '2022003001', name: '王五', gender: '男', dept: '文学院', grade: '2022' },
-        { id: '2022004001', name: '赵六', gender: '女', dept: '理学院', grade: '2022' },
-        { id: '2021005001', name: '孙七', gender: '男', dept: '经管学院', grade: '2021' },
-      ],
-      filterDept: '',
-      filterGrade: '',
-      filterId: '',
-      filterName: '',
-      filteredStudents: [],
-      isModalOpen: false,
-      isEditMode: false,
-      formData: {
-        id: '',
-        name: '',
-        gender: '男',
-        dept: '计算机学院',
-        grade: '',
+      students:[],
+      allDepts:[],
+      filterDept:'',
+      filterGrade:'',
+      filterAccount:'',
+      filterName:'',
+      filteredStudents:[],
+      isModalOpen:false,
+      isEditMode:false,
+      formData:{
+        account:'',
+        name:'',
+        gender:'男',
+        dept:'',
+        grade:'',
+        password:''
       },
-      idError: '',
+      idError:'',
     };
   },
-  mounted() {
-    this.filteredStudents = [...this.students];
+  async mounted() {
+    await this.fetchAllDepts();
+    await this.fetchStudents();
+    if(this.allDepts.length>0 && !this.formData.dept){
+      this.formData.dept = this.allDepts[0];
+    }
   },
   methods: {
+    async fetchAllDepts(){
+      try{
+        const response = await axios.get('http://localhost:3000/api/students/depts');
+        if(response.data.code === 200){
+          this.allDepts = response.data.data;
+        }else{
+          alert('获取院系数据失败'+response.data.message);
+        }
+      }catch{
+        alert('无法获取院系数据');
+      }
+    },
+
+    async fetchStudents(){
+      try{
+        const response = await axios.get('http://localhost:3000/api/students');
+        if(response.data.code === 200){
+          this.students = response.data.data;
+          this.handleFilter();
+        }else{
+          alert('获取学生数据失败'+response.data.message);
+        }
+      }catch{
+        alert('无法获取学生数据');
+      }
+    },
+
     handleFilter() {
       let result = [...this.students];
 
@@ -199,12 +222,12 @@ export default {
         result = result.filter(student => student.grade === this.filterGrade);
       }
 
-      if (this.filterId) {
-        result = result.filter(student => student.id.includes(this.filterId));
+      if (this.filterAccount) {
+        result = result.filter(student => student.account === this.filterAccount);
       }
 
       if (this.filterName) {
-        result = result.filter(student => student.name.includes(this.filterName));
+        result = result.filter(student => student.name === this.filterName);
       }
 
       this.filteredStudents = result;
@@ -216,7 +239,7 @@ export default {
         id: '',
         name: '',
         gender: '男',
-        dept: '计算机学院',
+        dept: this.allDepts[0] || '',
         grade: '',
       };
       this.idError = '';
@@ -225,7 +248,13 @@ export default {
 
     openEditModal(student) {
       this.isEditMode = true;
-      this.formData = { ...student };
+      this.formData = { 
+        account: student.account,
+        name: student.name,
+        gender: student.gender,
+        dept: student.dept,
+        grade: student.grade
+      };
       this.idError = '';
       this.isModalOpen = true;
     },
@@ -234,38 +263,66 @@ export default {
       this.isModalOpen = false;
     },
 
-    submitForm() {
-      if (!this.formData.id || !this.formData.name || !this.formData.grade) {
+    async submitForm(){
+      if(!this.formData.account||!this.formData.name||!this.formData.grade){
         alert('学号、姓名、年级不能为空！');
         return;
       }
-
-      if (!this.isEditMode) {
-        const isDuplicate = this.students.some(student => student.id === this.formData.id);
-        if (isDuplicate) {
-          this.idError = '该学号已存在，请输入唯一学号！';
-          return;
+      if(!this.isEditMode && !this.formData.password){
+        alert('初始密码不能为空');
+        return;
+      }
+      try{
+        if(this.isEditMode){
+          const response = await axios.put(
+            'http://localhost:3000/api/students/${this.formData.account}',
+            this.formData
+          );
+          if (response.data.code === 200) {
+            alert('编辑成功！');
+            this.fetchStudents();
+            this.closeModal();
+          } else {
+            alert('编辑失败：' + response.data.message);
+          }
+        }else{
+          const response = await axios.post(
+            'http://localhost:3000/api/students',
+            this.formData
+          );
+          if (response.data.code === 200) {
+            alert('新增成功！');
+            this.fetchStudents();
+            this.closeModal();
+          } else {
+            if (response.data.code === 409) {
+              this.idError = '该学号已存在，请输入唯一学号！';
+            } else {
+              alert('新增失败：' + response.data.message);
+            }
+          }
         }
-      }
+      }catch{
 
-      if (this.isEditMode) {
-        const index = this.students.findIndex(student => student.id === this.formData.id);
-        this.students[index] = { ...this.formData };
-        alert('编辑成功！');
-      } else {
-        this.students.push({ ...this.formData });
-        alert('新增成功！');
       }
-
-      this.handleFilter();
-      this.closeModal();
     },
 
-    deleteStudent(id) {
-      if (confirm('确定要删除该学生吗？')) {
-        this.students = this.students.filter(student => student.id !== id);
-        this.handleFilter();
-        alert('删除成功！');
+    async deleteStudent(account) {
+      if (confirm('确定要删除该学生吗？删除后不可恢复！')) {
+        try {
+          const response = await axios.delete(
+            `http://localhost:3000/api/students/${account}`
+          );
+          if (response.data.code === 200) {
+            alert('删除成功！');
+            this.fetchStudents();
+          } else {
+            alert('删除失败：' + response.data.message);
+          }
+        } catch (error) {
+          console.error('删除学生失败：', error);
+          alert('网络错误，删除失败');
+        }
       }
     },
   },

@@ -3,24 +3,10 @@
     <div class="home-content">
       <header class="page-header">
         <div class="current-time">{{ currentTime }}</div>
-        <div class="teacher-info">
-          <span>{{ teacherName }}  {{ teacherId }}</span>
+        <div class="teacher-info" v-if="teacher">
+          <span>{{ teacher.name }}  {{ teacher.account }}</span>
         </div>
       </header>
-
-      <main class="main-content">
-        <div class="tobecom_work">
-          <h2>批改作业提示</h2>
-          <ul>
-            <li v-for="work in workTobecompleted" :key="work.courseid">
-              {{ work.coursename }} - {{ work.courseid }}
-            </li>
-          </ul>
-        </div>
-
-        <div class="content-area">
-        </div>
-      </main>
     </div>
   </div>
 </template>
@@ -29,9 +15,8 @@
 export default {
     data() {
     return {
-      teacherName: '王三',
-      teacherId: '121212',
-      currentTime: ''
+      teacher:null,
+      currentTime:''
     };
   },
   methods: {
@@ -50,6 +35,10 @@ export default {
     }
   },
   mounted() {
+    const teacherInfo = localStorage.getItem('teacherInfo');
+    if(teacherInfo){
+      this.teacher = JSON.parse(teacherInfo);
+    }
     this.updateTime();
     this.timeInterval = setInterval(() => {
       this.updateTime();

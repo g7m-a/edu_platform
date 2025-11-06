@@ -26,18 +26,13 @@
         </div>
         
         <button @click="handleLogin" class="login-btn">登录</button>
-        
-        <!-- <div class="register-link">
-          没有账号？
-          <router-link to="/student-register" class="link">去注册</router-link>
-        </div> -->
       </div>
     </div>
   </div>
 </template>
 
 <script>
-
+import axios from 'axios';
 export default {
   data() {
     return {
@@ -47,11 +42,31 @@ export default {
   },
   methods: {
     async handleLogin() {
-      if (this.account && this.password) {
-        alert('学生登录成功');
-        this.$router.push('/student-homepage');
-      } else {
+      if (!this.account || !this.password) {
         alert('学号和密码不能为空');
+        return;
+      }
+
+      try {
+        const response = await axios.post(
+          'http://localhost:3000/api/student/login',
+          { 
+            account: this.account,
+            password: this.password
+          }
+        );
+
+        const { code, message } = response.data;
+        if (code === 200) {
+          alert(message || '登录成功');
+          localStorage.setItem('studentInfo', JSON.stringify(response.data.data.token));
+          this.$router.push('/student-homepage');
+        } else {
+          alert(message || '登录失败');
+        }
+      } catch (error) {
+        console.error('登录请求失败：', error);
+        alert('网络错误或服务器异常，请稍后重试');
       }
     }
   }

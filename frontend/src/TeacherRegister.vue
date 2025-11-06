@@ -1,12 +1,12 @@
 <template>
-  <div class="login-container">
-    <div class="login-card">
-      <div class="login-header">
-        <h2>教师登录</h2>
-        <p>请输入工号和密码登录系统</p>
+  <div class="register-container">
+    <div class="register-card">
+      <div class="register-header">
+        <h2>教师注册</h2>
+        <p>请输入合规的工号和密码注册系统</p>
       </div>
       
-      <div class="login-form">
+      <div class="register-form">
         <div class="form-group">
           <input 
             v-model="account" 
@@ -24,57 +24,52 @@
             type="password"
           />
         </div>
+
+        <div class="form-group">
+          <input 
+            v-model="aspassword" 
+            placeholder="请确认密码" 
+            class="form-input"
+            type="password"
+          />
+        </div>
         
-        <button @click="handleLogin" class="login-btn">登录</button>
+        <button @click="handleRegister" class="register-btn">注册</button>
+        
+        <div class="login-link">
+          已有账号？
+          <router-link to="/teacher-login" class="link">去登录</router-link>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-import axios from 'axios';
-export default {
-  data() {
-    return {
-      account: '',
-      password: ''
-    };
-  },
-  methods: {
-    async handleLogin() {
-      if (!this.account || !this.password) {
-        alert('工号和密码不能为空');
-        return;
-      }
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 
-      try {
-        const response = await axios.post(
-          'http://localhost:3000/api/teacher/login',
-          { 
-            account: this.account,
-            password: this.password
-          }
-        );
+const account = ref('');
+const password = ref('');
+const aspassword = ref('');
+const router = useRouter();
 
-        const { code, message } = response.data;
-        if (code === 200) {
-          alert(message || '登录成功');
-          localStorage.setItem('teacherInfo', JSON.stringify(response.data.data.token));
-          this.$router.push('/teacher-homepage');
-        } else {
-          alert(message || '登录失败');
-        }
-      } catch (error) {
-        console.error('登录请求失败：', error);
-        alert('网络错误或服务器异常，请稍后重试');
-      }
+const handleRegister = async () => {
+  if (account.value && password.value) {
+    if(password.value == aspassword.value){
+      alert('教师注册成功');
+      router.push('/student-login');
+    }else {
+      alert('请确认密码')
     }
+  } else {
+    alert('工号和密码不能为空');
   }
 };
 </script>
 
 <style scoped>
-.login-container {
+.register-container {
   position: fixed;
   top: 0;
   left: 0;
@@ -84,7 +79,7 @@ export default {
   overflow: hidden;
 }
 
-.login-card {
+.register-card {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -98,25 +93,25 @@ export default {
   box-sizing: border-box;
 }
 
-.login-header {
+.register-header {
   text-align: center;
   margin-bottom: 30px;
 }
 
-.login-header h2 {
+.register-header h2 {
   color: #333;
   margin: 0 0 10px 0;
   font-size: 24px;
   font-weight: 600;
 }
 
-.login-header p {
+.register-header p {
   color: #666;
   margin: 0;
   font-size: 14px;
 }
 
-.login-form {
+.register-form {
   display: flex;
   flex-direction: column;
   gap: 15px;
@@ -142,7 +137,7 @@ export default {
   box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
 }
 
-.login-btn {
+.register-btn {
   width: 100%;
   padding: 13px;
   background-color: #42b983;
@@ -156,11 +151,11 @@ export default {
   margin-top: 10px;
 }
 
-.login-btn:hover {
+.register-btn:hover {
   background-color: #359e6d;
 }
 
-.register-link {
+.login-link {
   text-align: center;
   margin-top: 20px;
   color: #666;
