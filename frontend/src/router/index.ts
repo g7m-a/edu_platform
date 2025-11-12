@@ -11,6 +11,7 @@ import AdminHomePage from '../AdminHomePage.vue';
 import StudentManagePage from '../StudentManagePage.vue';
 import TeacherManagePage from '../TeacherManagePage.vue';
 import CourseManagePage from '../CourseManagePage.vue';
+import CourseSeek from '../CourseSeek.vue';
 
 const routes = [
   { path: '/', redirect: '/Entry' },
@@ -25,7 +26,8 @@ const routes = [
   { path: '/admin-homepage', component: AdminHomePage },
   { path: '/teachermanage-page', component: TeacherManagePage },
   { path: '/studentmanage-page', component: StudentManagePage },
-  { path: '/coursemanage-page', component: CourseManagePage }
+  { path: '/coursemanage-page', component: CourseManagePage },
+  { path: '/course-seek', component: CourseSeek }
 ];
 
 const router = createRouter({
