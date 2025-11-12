@@ -65,7 +65,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="student in filteredStudents" :key="student.id">
+          <tr v-for="student in filteredStudents" :key="student.account">
             <td>{{ student.account }}</td>
             <td>{{ student.name }}</td>
             <td>{{ student.gender }}</td>
@@ -73,7 +73,7 @@
             <td>{{ student.grade }}</td>
             <td class="operate-btn-group">
               <button @click="openEditModal(student)" class="edit-btn">编辑</button>
-              <button @click="deleteStudent(student.id)" class="delete-btn">删除</button>
+              <button @click="deleteStudent(student.account)" class="delete-btn">删除</button>
             </td>
           </tr>
           <tr v-if="filteredStudents.length === 0">
@@ -93,7 +93,7 @@
           <div class="form-item">
             <label>学号：</label>
             <input
-              v-model="formData.id"
+              v-model="formData.account"
               class="form-control"
               :disabled="isEditMode"
               placeholder="输入唯一学号"
@@ -120,11 +120,11 @@
 
           <div class="form-item">
             <label>院系：</label>
-            <select v-model="formData.dept" class="form-control">
-              <option v-for="dept in allDepts" :key="dept" :value="dept">
-                {{ dept }}
-              </option>
-            </select>
+            <input
+              v-model="formData.dept"
+              class="form-control"
+              placeholder="输入学生所属院系"
+            />
           </div>
 
           <div class="form-item">
@@ -168,12 +168,14 @@ export default {
       formData:{
         account:'',
         name:'',
-        gender:'男',
+        gender:'',
         dept:'',
         grade:'',
         password:''
       },
       idError:'',
+      isDeleteModalOpen:false,
+      deleteStudentId:''
     };
   },
   async mounted() {
@@ -236,7 +238,7 @@ export default {
     openAddModal() {
       this.isEditMode = false;
       this.formData = {
-        id: '',
+        account: '',
         name: '',
         gender: '男',
         dept: this.allDepts[0] || '',
@@ -264,19 +266,16 @@ export default {
     },
 
     async submitForm(){
-      if(!this.formData.account||!this.formData.name||!this.formData.grade){
+      const {account, name, gender, dept, grade} = this.formData;
+      if(!account || !name || !grade){
         alert('学号、姓名、年级不能为空！');
-        return;
-      }
-      if(!this.isEditMode && !this.formData.password){
-        alert('初始密码不能为空');
         return;
       }
       try{
         if(this.isEditMode){
           const response = await axios.put(
-            'http://localhost:3000/api/students/${this.formData.account}',
-            this.formData
+            `http://localhost:3000/api/students/${account}`,
+            {name, gender, dept, grade}
           );
           if (response.data.code === 200) {
             alert('编辑成功！');
@@ -287,8 +286,8 @@ export default {
           }
         }else{
           const response = await axios.post(
-            'http://localhost:3000/api/students',
-            this.formData
+            'http://localhost:3000/api/student/add',
+            {account, name, gender, dept, grade, password:'123'}
           );
           if (response.data.code === 200) {
             alert('新增成功！');
@@ -303,7 +302,8 @@ export default {
           }
         }
       }catch{
-
+        console.error('提交学生数据失败：', error);
+        alert('网络错误，操作失败');
       }
     },
 

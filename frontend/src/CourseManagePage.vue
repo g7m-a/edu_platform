@@ -29,7 +29,7 @@
       <div class="filter-item">
         <label>授课教师工号：</label>
         <input
-          v-model="filterTeacherId"
+          v-model="filterTeacherAccount"
           placeholder="输入授课教师工号搜索"
           class="filter-input"
           @input="handleFilter"
@@ -57,6 +57,7 @@
             <th>授课教师</th>
             <th>开始日期</th>
             <th>结束日期</th>
+            <th>授课地点</th>
             <th>上课时间</th>
             <th>操作</th>
           </tr>
@@ -65,14 +66,18 @@
           <tr v-for="course in filteredCourses" :key="course.id">
             <td>{{ course.id }}</td>
             <td>{{ course.name }}</td>
-            <td>{{ course.teacherid }}</td>
-            <td>{{ course.teachername }}</td><!--同样通过函数搜索教师姓名 -->
+            <td>{{ course.teacheraccount }}</td>
+            <td>{{ course.teachername }}</td>
             <td>{{ course.startDate }}</td>
             <td>{{ course.endDate }}</td>
+            <td>{{ course.place }}</td>
             <td>
-              <div v-for="(item, index) in course.classTime" :key="index">
-                {{ item.week }} 第{{ item.classes.join('-') }}节
+              <div v-if="course.timeList && course.timeList.length">
+                <div v-for="(item, index) in course.timeList" :key="index" class="time-item">
+                  {{ item.week }} {{ item.classes[0] }}-{{ item.classes[1] }}节
+                </div>
               </div>
+              <div v-else class="empty-time">无</div>
             </td>
             <td class="operate-btn-group">
               <button @click="openEditModal(course)" class="edit-btn">编辑</button>
@@ -80,7 +85,7 @@
             </td>
           </tr>
           <tr v-if="filteredCourses.length === 0">
-            <td colspan="7" class="empty-tip">暂无匹配课程数据</td>
+            <td colspan="9" class="empty-tip">暂无匹配课程数据</td>
           </tr>
         </tbody>
       </table>
@@ -114,11 +119,21 @@
           </div>
 
           <div class="form-item">
-            <label>授课教师：</label>
+            <label>授课教师工号：</label>
             <input
-              v-model="formData.teacherid"
+              v-model="formData.teacheraccount"
               class="form-control"
               placeholder="输入授课教师工号"
+              @input="getTeacherName"
+            />
+          </div>
+          <div class="form-item">
+            <label>授课教师姓名：</label>
+            <input
+              v-model="formData.teachername"
+              class="form-control"
+              readonly
+              placeholder="输入工号后自动填充"
             />
           </div>
 
@@ -141,53 +156,55 @@
           </div>
 
           <div class="form-item">
+            <label>上课地点：</label>
+            <input
+              v-model="formData.place"
+              class="form-control"
+              placeholder="上课地点"
+            />
+          </div>
+          <div class="form-item">
             <label>上课时间：</label>
-            <div class="time-group-container">
-              <div 
-                v-for="(timeGroup, groupIndex) in formData.classTime" 
-                :key="groupIndex" 
-                class="time-group"
-              >
-                <select 
-                  v-model="timeGroup.week" 
-                  class="week-selector form-control"
-                >
+            <div class="time-select-container">
+              <div v-for="(item, index) in formData.timeList" :key="index" class="time-select-item">
+                <select v-model="item.week" class="week-select">
                   <option value="">选择星期</option>
                   <option value="周一">周一</option>
                   <option value="周二">周二</option>
                   <option value="周三">周三</option>
                   <option value="周四">周四</option>
                   <option value="周五">周五</option>
+                  <option value="周六">周六</option>
+                  <option value="周日">周日</option>
                 </select>
-
-                <div class="class-selector">
-                  <label class="class-label">节次：</label>
-                  <div class="class-options">
-                    <label v-for="classNum in 11" :key="classNum" class="class-option">
-                      <input
-                        type="checkbox"
-                        :checked="timeGroup.classes.includes(classNum)"
-                        @change="handleClassChange(groupIndex, classNum, $event)"
-                        class="class-checkbox"
-                      />
-                      {{ classNum }}
-                    </label>
-                  </div>
+                <div class="classes-group">
+                  <label>节次：</label>
+                  <input
+                    type="number"
+                    v-model.number="item.classes[0]"
+                    min="1"
+                    max="12"
+                    class="class-input"
+                    placeholder="起始节"
+                    @change="fixClassOrder(item)"
+                  />
+                  <input
+                    type="number"
+                    v-model.number="item.classes[1]"
+                    min="1"
+                    max="12"
+                    class="class-input"
+                    placeholder="结束节"
+                    @change="fixClassOrder(item)"
+                  />
                 </div>
-
-                <button 
-                  @click="removeTimeGroup(groupIndex)" 
-                  class="remove-group-btn"
-                  v-if="formData.classTime.length > 1"
-                >
-                  删除
-                </button>
+                <button @click="removeTimeItem(index)" class="remove-time-btn">×</button>
               </div>
+              <button @click="addTimeItem" class="add-time-btn">+ 添加上课时段</button>
             </div>
-            <button @click="addTimeGroup" class="add-group-btn">+ 添加时间段</button>
-            <p class="error-tip" v-if="timeError">{{ timeError }}</p>
           </div>
         </div>
+
         <div class="modal-footer">
           <button @click="closeModal" class="cancel-btn">取消</button>
           <button @click="submitForm" class="confirm-btn">确认</button>
@@ -198,37 +215,14 @@
 </template>
 
 <script>
+import axios from 'axios';
 export default {
   data() {
     return {
-      courses: [
-        { 
-          id: 'C001', 
-          name: '数据结构', 
-          teacherid: '20001', 
-          teachername: '张三',
-          startDate: '2023-09-01', 
-          endDate: '2023-12-31', 
-          classTime: [
-            { week: '周一', classes: [1, 2] },
-            { week: '周三', classes: [3, 4] }
-          ] 
-        },
-        { 
-          id: 'C002', 
-          name: '高等数学', 
-          teacherid: '20002',
-          teachername: '李四', 
-          startDate: '2023-09-01', 
-          endDate: '2023-12-31', 
-          classTime: [
-            { week: '周二', classes: [5, 6] }
-          ] 
-        }
-      ],
+      courses: [],
       filterCourseId: '',
       filterCourseName: '',
-      filterTeacherId: '',
+      filterTeacherAccount: '',
       filterTeacherName: '',
       filteredCourses: [],
       isModalOpen: false,
@@ -236,22 +230,68 @@ export default {
       formData: {
         id: '',
         name: '',
-        teacherid: '',
+        teacheraccount: '',
         teachername: '',
         startDate: '',
         endDate: '',
-        classTime: [
-          { week: '', classes: [] }
-        ]
+        place: '',
+        timeList: []
       },
-      idError: '',
-      timeError: ''
+      idError: ''
     };
   },
-  mounted() {
+  async mounted() {
+    await this.fetchCourses();
+    await this.bindTeacherNamesTOCourses();
     this.filteredCourses = [...this.courses];
   },
   methods: {
+    //获取课程信息
+    async fetchCourses() {
+      try {
+        const response = await axios.get('http://localhost:3000/api/courses');
+        this.courses = (response.data.data || []).map(course => ({
+          ...course,
+          startDate: new Date(course.startdate).toLocaleDateString('zh-CN'),
+          endDate: new Date(course.enddate).toLocaleDateString('zh-CN'),
+          timeList: course.time ? JSON.parse(course.time) : []
+        }));
+        this.filteredCourses = [...this.courses];
+      } catch (error) {
+        console.error('获取课程失败：', error);
+        alert('无法加载课程数据，请检查网络');
+      }
+    },
+
+    //查询教师姓名绑定至课程
+    async bindTeacherNamesTOCourses() {
+      for (const course of this.courses) {
+        try {
+          const response = await axios.get(`http://localhost:3000/api/teachername/${course.teacheraccount}`);
+          course.teachername = response.data.data;
+        } catch (error) {
+          course.teachername = '';
+        }
+      }
+    },
+
+    //通过教师工号查询到教师姓名
+    async getTeacherName() {
+      const teacheraccount = this.formData.teacheraccount;
+      try {
+        const response = await axios.get(`http://localhost:3000/api/teachername/${teacheraccount}`);
+        if (response.data.code === 200) {
+          this.formData.teachername = response.data.data;
+        } else {
+          this.formData.teachername = '';
+          alert('获取教师姓名失败' + response.data.message);
+        }
+      } catch {
+        alert('无法获取教师姓名');
+      }
+    },
+
+    //筛选
     handleFilter() {
       let result = [...this.courses];
 
@@ -263,46 +303,43 @@ export default {
         result = result.filter(course => course.name.includes(this.filterCourseName));
       }
 
-      if (this.filterTeacherId) {
-        result = result.filter(course => course.teacherid === this.filterTeacherId);
+      if (this.filterTeacherAccount) {
+        result = result.filter(course => course.teacheraccount === this.filterTeacherAccount);
       }
 
       if (this.filterTeacherName) {
-        // 这里需要函数通过id搜索教师姓名
         result = result.filter(course => course.teachername.includes(this.filterTeacherName));
       }
 
       this.filteredCourses = result;
     },
 
+    //增加课程模式
     openAddModal() {
       this.isEditMode = false;
       this.formData = {
         id: '',
         name: '',
-        teacher: '',
+        teacheraccount: '',
+        teachername: '',
         startDate: '',
         endDate: '',
-        classTime: [
-          { week: '', classes: [] }
-        ]
+        place: '',
+        timeList: []
       };
       this.idError = '';
-      this.timeError = '';
       this.isModalOpen = true;
     },
 
-    openEditModal(course) {
+    //编辑课程模式
+    async openEditModal(course) {
       this.isEditMode = true;
-      this.formData = { 
+      this.formData = {
         ...course,
-        classTime: course.classTime.map(item => ({
-          week: item.week,
-          classes: [...item.classes]
-        }))
+        timeList: course.timeList || []
       };
+      await this.getTeacherName();
       this.idError = '';
-      this.timeError = '';
       this.isModalOpen = true;
     },
 
@@ -310,36 +347,86 @@ export default {
       this.isModalOpen = false;
     },
 
-    addTimeGroup() {
-      this.formData.classTime.push({
-        week: '',
-        classes: []
+    //添加上课时间段时调用，再调用函数检查时间段是否冲突
+    addTimeItem() {
+      this.formData.timeList.push({ week: '', classes: [1, 2] });
+      this.$nextTick(() => {
+        this.checkTimeConflict(this.formData.timeList.filter(item => 
+          item.week && item.classes[0] && item.classes[1] && item.classes[0] <= item.classes[1]
+        ));
       });
     },
 
-    removeTimeGroup(index) {
-      if (this.formData.classTime.length > 1) {
-        this.formData.classTime.splice(index, 1);
-      }
-    },
-
-    handleClassChange(groupIndex, classNum, event) {
-      const group = this.formData.classTime[groupIndex];
-      if (event.target.checked) {
-        if (!group.classes.includes(classNum)) {
-          group.classes.push(classNum);
-          group.classes.sort((a, b) => a - b);
-        }
+    //删除上课时间段
+    removeTimeItem(index) {
+      if (this.formData.timeList.length > 1) {
+        this.formData.timeList.splice(index, 1);
       } else {
-        group.classes = group.classes.filter(num => num !== classNum);
+        alert('至少保留一个上课时段');
       }
     },
 
-    submitForm() {
-      const { id, name, teacher, startDate, endDate, classTime } = this.formData;
-      
-      if (!id || !name || !teacher || !startDate || !endDate) {
-        alert('课程编号、名称、教师、起止日期不能为空！');
+    //是否覆盖
+    isTimeOverlap(classes1, classes2) {
+      const start1 = classes1[0];
+      const end1 = classes1[1];
+      const start2 = classes2[0];
+      const end2 = classes2[1];
+      return start1 <= end2 && end1 >= start2;
+    },
+
+    //是否重复
+    isTimeIdentical(week1, classes1, week2, classes2) {
+      return week1 === week2 && classes1[0] === classes2[0] && classes1[1] === classes2[1];
+    },
+
+    //检查时间段是否冲突函数
+    checkTimeConflict(newTimeList) {
+      for (let i = 0; i < newTimeList.length; i++) {
+        const curr = newTimeList[i];
+        if (!curr.week || !curr.classes[0] || !curr.classes[1]) continue;
+        
+        for (let j = i + 1; j < newTimeList.length; j++) {
+          const next = newTimeList[j];
+          if (!next.week || !next.classes[0] || !next.classes[1]) continue;
+          
+          if (curr.week === next.week) {
+            if (this.isTimeIdentical(curr.week, curr.classes, next.week, next.classes)) {
+              alert(`冲突：${curr.week} ${curr.classes[0]}-${curr.classes[1]}节 与自身时段完全重复`);
+              return true;
+            }
+            if (this.isTimeOverlap(curr.classes, next.classes)) {
+              alert(`冲突：${curr.week} ${curr.classes[0]}-${curr.classes[1]}节 与 ${next.week} ${next.classes[0]}-${next.classes[1]}节 节次重合`);
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    },
+
+    //实时检查是否冲突
+    checkRealTimeConflict() {
+      const validList = this.formData.timeList.filter(item => 
+        item.week && item.classes[0] && item.classes[1] && item.classes[0] <= item.classes[1]
+      );
+      this.checkTimeConflict(validList);
+    },
+
+    //节次不合法时修正
+    fixClassOrder(item) {
+      if (item.classes[0] > item.classes[1]) {
+        [item.classes[0], item.classes[1]] = [item.classes[1], item.classes[0]];
+        alert('节次不合理，已自动修正为“结束节 ≥ 起始节”');
+      }
+    },
+    
+    //编辑或修改课程信息时调用，通过后端端口提交至数据库
+    async submitForm() {
+      const { id, name, teacheraccount, startDate, endDate, place, timeList } = this.formData;
+
+      if (!id || !name || !teacheraccount || !startDate || !endDate || !place || timeList.length === 0) {
+        alert('课程编号、名称、教师、起止日期、上课地点、上课时间不能为空！');
         return;
       }
 
@@ -348,21 +435,20 @@ export default {
         return;
       }
 
-      let timeValid = true;
-      classTime.forEach((group, index) => {
-        if (!group.week) {
-          timeValid = false;
-        }
-        if (group.classes.length === 0) {
-          timeValid = false;
-        }
+      const validTimeList = timeList.filter(item => {
+        const isClassValid = item.classes[0] <= item.classes[1];
+        return item.week && item.classes[0] && item.classes[1] && isClassValid;
       });
 
-      if (!timeValid || classTime.length === 0) {
-        this.timeError = '请完善所有时间段的星期和节次信息';
+      if (validTimeList.length === 0) {
+        alert('请添加有效的上课时间（需选择星期，且起始节≤结束节）');
         return;
       }
-      this.timeError = '';
+
+      const hasConflict = this.checkTimeConflict(validTimeList);
+      if (hasConflict) {
+        return;
+      }
 
       if (!this.isEditMode) {
         const isDuplicate = this.courses.some(course => course.id === id);
@@ -372,24 +458,54 @@ export default {
         }
       }
 
-      if (this.isEditMode) {
-        const index = this.courses.findIndex(course => course.id === id);
-        this.courses[index] = { ...this.formData };
-        alert('编辑成功！');
-      } else {
-        this.courses.push({ ...this.formData });
-        alert('新增成功！');
-      }
+      try {
+        const timeStr = JSON.stringify(validTimeList);
 
-      this.handleFilter();
-      this.closeModal();
+        if (this.isEditMode) {
+          await axios.put(`http://localhost:3000/api/course/${id}`, {
+            id,
+            name,
+            teacheraccount,
+            startdate: startDate,
+            enddate: endDate,
+            place,
+            time: timeStr
+          });
+        } else {
+          await axios.post('http://localhost:3000/api/course/add', {
+            id,
+            name,
+            teacheraccount,
+            startdate: startDate,
+            enddate: endDate,
+            place,
+            time: timeStr
+          });
+        }
+
+        alert(this.isEditMode ? '编辑成功！' : '新增成功！');
+        await this.fetchCourses();
+        await this.bindTeacherNamesTOCourses();
+        this.filteredCourses = [...this.courses];
+        this.closeModal();
+      } catch (error) {
+        console.error('提交课程失败：', error);
+        alert('网络错误或服务器异常，操作失败');
+      }
     },
 
-    deleteCourse(id) {
+    //删除课程
+    async deleteCourse(id) {
       if (confirm('确定要删除该课程吗？')) {
-        this.courses = this.courses.filter(course => course.id !== id);
-        this.handleFilter();
-        alert('删除成功！');
+        try {
+          await axios.delete(`http://localhost:3000/api/course/${id}`);
+          this.courses = this.courses.filter(course => course.id !== id);
+          this.handleFilter();
+          alert('删除成功！');
+        } catch (error) {
+          console.error('删除课程失败：', error);
+          alert('删除失败，请重试');
+        }
       }
     }
   }
@@ -759,5 +875,101 @@ export default {
 
 .confirm-btn:hover {
   background-color: #359e6d;
+}
+
+/* 新增：上课时间选择组件样式 */
+.time-select-container {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.time-select-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.week-select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  flex: 0 0 120px;
+  outline: none;
+}
+
+.week-select:focus {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+
+.classes-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 200px;
+}
+
+.class-input {
+  width: 60px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
+  outline: none;
+}
+
+.class-input:focus {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+
+.separator {
+  color: #666;
+  font-size: 14px;
+}
+
+.add-time-btn {
+  padding: 6px 12px;
+  border: 1px solid #409eff;
+  border-radius: 4px;
+  background: #f0f9ff;
+  color: #409eff;
+  cursor: pointer;
+  width: fit-content;
+  transition: all 0.2s;
+}
+
+.add-time-btn:hover {
+  background: #409eff;
+  color: white;
+}
+
+.remove-time-btn {
+  padding: 2px 6px;
+  border: 1px solid #ff4d4f;
+  border-radius: 50%;
+  background: transparent;
+  color: #ff4d4f;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.remove-time-btn:hover {
+  background: #ff4d4f;
+  color: white;
+}
+
+.time-item {
+  line-height: 1.8;
+  color: #333;
+}
+
+.empty-time {
+  color: #999;
+  font-size: 14px;
 }
 </style>

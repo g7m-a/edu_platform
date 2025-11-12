@@ -10,11 +10,9 @@
         <label>院系筛选：</label>
         <select v-model="filterDept" class="filter-input" @change="handleFilter">
           <option value="">全部院系</option>
-          <option value="计算机学院">计算机学院</option>
-          <option value="电子信息学院">电子信息学院</option>
-          <option value="文学院">文学院</option>
-          <option value="理学院">理学院</option>
-          <option value="经管学院">经管学院</option>
+          <option v-for="dept in allDepts" :key="dept" :value="dept">
+            {{ dept }}
+          </option>
         </select>
       </div>
 
@@ -62,19 +60,19 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="teacher in filteredteachers" :key="teacher.id">
-            <td>{{ teacher.id }}</td>
+          <tr v-for="teacher in filteredteachers" :key="teacher.account">
+            <td>{{ teacher.account }}</td>
             <td>{{ teacher.name }}</td>
             <td>{{ teacher.gender }}</td>
             <td>{{ teacher.dept }}</td>
             <td>
-              {{ teacher.courses.length > 0 ? teacher.courses.join('，') : '无' }}
+              {{ teacher.courses && teacher.courses.length > 0 ? teacher.courses.join('，') : '无' }}
             </td>
             <td class="operate-btn-group">
               <button @click="openEditModal(teacher)" class="edit-btn">编辑</button>
               <!-- 有课程时禁用删除按钮并添加提示 -->
               <button 
-                @click="showDeleteConfirm(teacher.id)" 
+                @click="showDeleteConfirm(teacher.account)" 
                 class="delete-btn"
                 :disabled="teacher.courses.length > 0"
                 :title="teacher.courses.length > 0 ? '该教师有授课，禁止删除' : '删除教师'"
@@ -100,7 +98,7 @@
           <div class="form-item">
             <label>工号：</label>
             <input
-              v-model="formData.id"
+              v-model="formData.account"
               class="form-control"
               :disabled="isEditMode"
               placeholder="输入唯一工号"
@@ -127,13 +125,11 @@
 
           <div class="form-item">
             <label>院系：</label>
-            <select v-model="formData.dept" class="form-control">
-              <option value="计算机学院">计算机学院</option>
-              <option value="电子信息学院">电子信息学院</option>
-              <option value="文学院">文学院</option>
-              <option value="理学院">理学院</option>
-              <option value="经管学院">经管学院</option>
-            </select>
+            <input
+              v-model="formData.dept"
+              class="form-control"
+              placeholder="输入教师所属院系"
+            />
           </div>
 
           <div class="form-item" v-if="isEditMode">
@@ -159,7 +155,6 @@
         </div>
         <div class="modal-form">
           <p class="delete-tip">确认删除该教师？</p>
-          <!-- 移除接手教师输入相关内容 -->
         </div>
         <div class="modal-footer">
           <button @click="closeDeleteModal" class="cancel-btn">取消</button>
@@ -171,46 +166,12 @@
 </template>
 
 <script>
+import axios from 'axios';
 export default {
   data() {
     return {
-      teachers: [
-        { 
-          id: '2023001001', 
-          name: '张三', 
-          gender: '男', 
-          dept: '计算机学院',
-          courses: ['数据结构', '算法分析']
-        },
-        { 
-          id: '2023002001', 
-          name: '李四', 
-          gender: '女', 
-          dept: '电子信息学院',
-          courses: ['电路原理'] 
-        },
-        { 
-          id: '2022003001', 
-          name: '王五', 
-          gender: '男', 
-          dept: '文学院',
-          courses: ['中国古代文学', '现代汉语'] 
-        },
-        { 
-          id: '2022004001', 
-          name: '赵六', 
-          gender: '女', 
-          dept: '理学院',
-          courses: ['高等数学'] 
-        },
-        { 
-          id: '2021005001', 
-          name: '孙七', 
-          gender: '男', 
-          dept: '经管学院',
-          courses: [] 
-        },
-      ],
+      teachers: [],
+      allDepts:[],
       filterDept: '',
       filterId: '',
       filterName: '',
@@ -219,21 +180,55 @@ export default {
       isModalOpen: false,
       isEditMode: false,
       formData: {
-        id: '',
+        account: '',
         name: '',
-        gender: '男',
-        dept: '计算机学院',
+        gender: '',
+        dept: '',
         courses: []
       },
       idError: '',
       isDeleteModalOpen: false,
-      deleteTeacherId: '' // 仅保留待删除教师ID，移除课程和接手教师相关字段
+      deleteTeacherId: ''
     };
   },
-  mounted() {
-    this.filteredteachers = [...this.teachers];
+  async mounted() {
+    await this.fetchAllDepts();
+    await this.fetchTeachers();
+    if(this.allDepts.length>0 && !this.formData.dept){
+      this.formData.dept = this.allDepts[0];
+    }
   },
   methods: {
+    async fetchAllDepts(){
+      try{
+        const response = await axios.get('http://localhost:3000/api/teachers/depts');
+        if(response.data.code === 200){
+          this.allDepts = response.data.data;
+        }else{
+          alert('获取院系数据失败'+response.data.message);
+        }
+      }catch{
+        alert('无法获取院系数据');
+      }
+    },
+
+    async fetchTeachers(){
+      try{
+        const response = await axios.get('http://localhost:3000/api/teachers');
+        if(response.data.code === 200){
+          this.teachers = response.data.data.map(teacher => ({
+            ...teacher,
+            courses: teacher.courses || []
+          }));
+          this.handleFilter();
+        }else{
+          alert('获取教师数据失败'+response.data.message);
+        }
+      }catch{
+        alert('无法获取教师数据');
+      }
+    },
+
     handleFilter() {
       let result = [...this.teachers];
 
@@ -242,7 +237,7 @@ export default {
       }
 
       if (this.filterId) {
-        result = result.filter(teacher => teacher.id === this.filterId);
+        result = result.filter(teacher => teacher.account === this.filterId);
       }
 
       if (this.filterName) {
@@ -262,11 +257,11 @@ export default {
     openAddModal() {
       this.isEditMode = false;
       this.formData = {
-        id: '',
+        account: '',
         name: '',
         gender: '男',
-        dept: '计算机学院',
-        courses: []
+        dept: this.allDepts[0] || '',
+        courses: [],
       };
       this.idError = '';
       this.isModalOpen = true;
@@ -283,52 +278,57 @@ export default {
       this.isModalOpen = false;
     },
 
-    submitForm() {
-      const { id, name } = this.formData;
+    async submitForm() {
+  const { account, name, gender, dept } = this.formData;
 
-      if (!id || !name) {
-        alert('工号、姓名不能为空！');
-        return;
-      }
+  if (!account || !name) {
+    alert('工号、姓名不能为空！');
+    return;
+  }
 
-      if (!this.isEditMode) {
-        const isDuplicate = this.teachers.some(teacher => teacher.id === id);
-        if (isDuplicate) {
-          this.idError = '该工号已存在，请输入唯一工号！';
-          return;
-        }
-      }
-
-      if (this.isEditMode) {
-        const index = this.teachers.findIndex(teacher => teacher.id === id);
-        this.teachers[index] = {
-          ...this.teachers[index],
-          name: this.formData.name,
-          gender: this.formData.gender,
-          dept: this.formData.dept
-        };
+  try {
+    if (this.isEditMode) {
+      const response = await axios.put(
+        `http://localhost:3000/api/teacher/${account}`,
+        { name, gender, dept }
+      );
+      if (response.data.code === 200) {
         alert('编辑成功！');
+        this.fetchTeachers();
+        this.closeModal();
       } else {
-        this.teachers.push({
-          ...this.formData,
-          courses: []
-        });
-        alert('新增成功！');
+        alert('编辑失败：' + response.data.message);
       }
+    } else {
+      const response = await axios.post(
+        'http://localhost:3000/api/teacher/add',
+        { account, name, gender, dept, password: '123' }
+      );
+      if (response.data.code === 200) {
+        alert('新增成功！');
+        this.fetchTeachers();
+        this.closeModal();
+      } else if (response.data.code === 409) {
+        this.idError = '该工号已存在，请输入唯一工号！';
+      } else {
+        alert('新增失败：' + response.data.message);
+      }
+    }
+  } catch (error) {
+    console.error('提交教师数据失败：', error);
+    alert('网络错误，操作失败');
+  }
+},
 
-      this.handleFilter();
-      this.closeModal();
-    },
-
-    showDeleteConfirm(id) {
-      const teacher = this.teachers.find(t => t.id === id);
-      // 校验是否有课程，有则直接提示禁止删除
+    showDeleteConfirm(account) {
+      const teacher = this.teachers.find(t => t.account === account);
+      //校验是否有课程，有则直接禁止删除
       if (teacher.courses.length > 0) {
         alert('该教师当前有授课任务，禁止删除！');
         return;
       }
-      // 无课程则打开删除确认弹窗
-      this.deleteTeacherId = id;
+      //无课程则打开删除确认弹窗
+      this.deleteTeacherId = account;
       this.isDeleteModalOpen = true;
     },
 
@@ -336,12 +336,22 @@ export default {
       this.isDeleteModalOpen = false;
     },
 
-    confirmDelete() {
-      // 直接删除教师，无需处理课程转移
-      this.teachers = this.teachers.filter(teacher => teacher.id !== this.deleteTeacherId);
-      alert('删除成功！');
-      this.handleFilter();
-      this.closeDeleteModal();
+    async confirmDelete() {
+      try {
+        const response = await axios.delete(
+          `http://localhost:3000/api/teacher/${this.deleteTeacherId}`
+        );
+        if (response.data.code === 200) {
+          alert('删除成功！');
+          this.fetchTeachers(); // 重新拉取数据
+          this.closeDeleteModal();
+        } else {
+          alert('删除失败：' + response.data.message);
+        }
+      } catch (error) {
+        console.error('删除教师失败：', error);
+        alert('网络错误，删除失败');
+      }
     }
   },
 };
