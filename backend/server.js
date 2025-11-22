@@ -75,6 +75,7 @@ app.get('/api/students',async(req,res)=>{
   }
 })
 
+//获取学生信息
 app.get('/api/student/:account', async (req, res) => {
   try {
     const { account } = req.params;
@@ -114,19 +115,32 @@ app.put('/api/students/:account', async (req, res) => {
   }
 });
 
-//删除学生
+// 删除学生
 app.delete('/api/students/:account', async (req, res) => {
   const { account } = req.params;
+  let connection;
   try {
-    const connection = await mysql.createConnection(dbConfig);
+    connection = await mysql.createConnection(dbConfig);
+    await connection.beginTransaction();
+
     await connection.execute(
-      //应添加从学生courses中删除该学生逻辑
+      'DELETE FROM student_course WHERE studentaccount = ?',
+      [account]
+    );
+
+    await connection.execute(
       'DELETE FROM student WHERE account = ?',
       [account]
     );
+
+    await connection.commit();
     await connection.end();
     res.json({ code: 200, message: '删除学生成功' });
   } catch (error) {
+    if (connection) {
+      await connection.rollback();
+      await connection.end();
+    }
     console.error('删除学生错误：', error);
     res.status(500).json({ code: 500, message: '服务器内部错误' });
   }
@@ -148,93 +162,117 @@ app.get('/api/students/depts', async (req, res) => {
   }
 });
 
-//选课
 app.post('/api/student/select-course', async (req, res) => {
   const { studentAccount, courseId } = req.body;
   let connection;
   try {
     connection = await mysql.createConnection(dbConfig);
-    connection.beginTransaction();
+    await connection.beginTransaction();
     const [studentRows] = await connection.execute(
-      'SELECT courses FROM student WHERE account = ?',
+      'SELECT * FROM student WHERE account = ?',
       [studentAccount]
     );
     if (studentRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({ code: 404, message: '学生不存在' });
     }
-    const oldCourses = studentRows[0].courses ;
-    if (oldCourses.includes(courseId)) {
-      await connection.rollback();
-      return res.status(400).json({ code: 400, message: '已选该课程' });
-    }
     const [courseRows] = await connection.execute(
-      'SELECT students, maxstu FROM course WHERE id = ?',
+      'SELECT maxstu FROM course WHERE id = ?',
       [courseId]
     );
     if (courseRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({ code: 404, message: '课程不存在' });
     }
-    const oldStudents = courseRows[0].students ;
-    if (oldStudents.length >= courseRows[0].maxstu) {
+    const maxStu = courseRows[0].maxstu;
+    const [countRows] = await connection.execute(
+      'SELECT COUNT(*) AS currentStu FROM student_course WHERE courseid = ?',
+      [courseId]
+    );
+    const currentStu = countRows[0].currentStu;
+    if (currentStu >= maxStu) {
       await connection.rollback();
       return res.status(400).json({ code: 400, message: '课程已达最大人数' });
     }
-    await connection.execute(
-      'UPDATE student SET courses = ? WHERE account = ?',
-      [JSON.stringify([...oldCourses, courseId]), studentAccount]
+    const [existRows] = await connection.execute(
+      'SELECT * FROM student_course WHERE studentaccount = ? AND courseid = ?',
+      [studentAccount, courseId]
     );
+    if (existRows.length > 0) {
+      await connection.rollback();
+      return res.status(400).json({ code: 400, message: '已选该课程' });
+    }
     await connection.execute(
-      'UPDATE course SET students = ? WHERE id = ?',
-      [JSON.stringify([...oldStudents, studentAccount]), courseId]
+      'INSERT INTO student_course (studentaccount, courseid) VALUES (?, ?)',
+      [studentAccount, courseId]
     );
+
     await connection.commit();
+    await connection.end();
     res.json({ code: 200, message: '选课成功' });
   } catch (error) {
-    await connection.rollback();
+    if (connection) {
+      await connection.rollback();
+      await connection.end();
+    }
     console.error('选课错误：', error);
     res.status(500).json({ code: 500, message: '服务器内部错误' });
   }
 });
 
-//退课
+// 退课
 app.post('/api/student/drop-course', async (req, res) => {
   const { studentAccount, courseId } = req.body;
+  let connection;
   try {
-    const connection = await mysql.createConnection(dbConfig);
-    connection.beginTransaction();
-    const [studentRows] = await connection.execute(
-      'SELECT courses FROM student WHERE account = ?',
-      [studentAccount]
+    connection = await mysql.createConnection(dbConfig);
+    await connection.beginTransaction();
+    const [existRows] = await connection.execute(
+      'SELECT * FROM student_course WHERE studentaccount = ? AND courseid = ?',
+      [studentAccount, courseId]
     );
-    if (studentRows.length === 0) {
+    if (existRows.length === 0) {
       await connection.rollback();
-      return res.status(404).json({ code: 404, message: '学生不存在' });
+      return res.status(400).json({ code: 400, message: '未选该课程' });
     }
-    const oldCourses = studentRows[0].courses;
-    const [courseRows] = await connection.execute(
-      'SELECT students FROM course WHERE id = ?',
-      [courseId]
-    );
-    if (courseRows.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ code: 404, message: '课程不存在' });
-    }
-    const oldStudents = courseRows[0].students;
     await connection.execute(
-      'UPDATE student SET courses = ? WHERE account = ?',
-      [JSON.stringify(oldCourses.filter(id => id !== courseId)), studentAccount]
+      'DELETE FROM student_course WHERE studentaccount = ? AND courseid = ?',
+      [studentAccount, courseId]
     );
-    await connection.execute(
-      'UPDATE course SET students = ? WHERE id = ?',
-      [JSON.stringify(oldStudents.filter(acc => acc !== studentAccount)), courseId]
-    );
+
     await connection.commit();
+    await connection.end();
     res.json({ code: 200, message: '退课成功' });
   } catch (error) {
-    await connection.rollback();
+    if (connection) {
+      await connection.rollback();
+      await connection.end();
+    }
     console.error('退课错误：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+//获取学生已选课程
+app.get('/api/student/:account/courses', async (req, res) => {
+  const { account } = req.params;
+  let connection;
+  try {
+    connection = await mysql.createConnection(dbConfig);
+    const [rows] = await connection.execute(`
+      SELECT c.id, c.name, c.startdate, c.enddate, c.teacheraccount, 
+             c.place, c.time, c.maxstu, t.name AS teachername
+      FROM student_course sc
+      JOIN course c ON sc.courseid = c.id
+      LEFT JOIN teacher t ON c.teacheraccount = t.account
+      WHERE sc.studentaccount = ?
+    `, [account]);
+
+    await connection.end();
+    res.json({ code: 200, data: rows });
+  } catch (error) {
+    if (connection) await connection.end();
+    console.error('获取学生已选课程错误：', error);
     res.status(500).json({ code: 500, message: '服务器内部错误' });
   }
 });
@@ -382,9 +420,12 @@ app.get('/api/teachers/depts', async (req, res) => {
 app.get('/api/courses', async (req, res) => {
   try {
     const connection = await mysql.createConnection(dbConfig);
-    const [rows] = await connection.execute(
-      'SELECT id, name, startdate, enddate, teacheraccount, place, time, students, maxstu FROM course'
-    );
+    const [rows] = await connection.execute(`
+      SELECT c.id, c.name, c.startdate, c.enddate, c.teacheraccount, 
+             c.place, c.time, c.maxstu,
+             (SELECT COUNT(*) FROM student_course sc WHERE sc.courseid = c.id) AS currentstu
+      FROM course c
+    `);
     await connection.end();
     res.json({ code: 200, data: rows });
   } catch (error) {
@@ -398,10 +439,10 @@ app.post('/api/courses/by-ids', async (req, res) => {
   let connection;
   try {
     connection = await mysql.createConnection(dbConfig);
-    
     const placeholders = courseIds.map(() => '?').join(',');
     const [courses] = await connection.execute(
-      `SELECT id, name, teacheraccount, time, startdate, enddate, place FROM course WHERE id IN (${placeholders})`,
+      `SELECT id, name, teacheraccount, time, startdate, enddate, place, maxstu 
+       FROM course WHERE id IN (${placeholders})`,
       courseIds
     );
 
@@ -411,6 +452,11 @@ app.post('/api/courses/by-ids', async (req, res) => {
         [course.teacheraccount]
       );
       course.teachername = teacherRows.length > 0 ? teacherRows[0].name : '未知教师';
+      const [countRows] = await connection.execute(
+        'SELECT COUNT(*) AS currentstu FROM student_course WHERE courseid = ?',
+        [course.id]
+      );
+      course.currentstu = countRows[0].currentstu;
     }
 
     res.json({ code: 200, data: courses });
@@ -418,9 +464,7 @@ app.post('/api/courses/by-ids', async (req, res) => {
     console.error('批量查询课程失败：', error);
     res.status(500).json({ code: 500, message: '查询课程失败' });
   } finally {
-    if (connection) {
-      await connection.end(); // 关闭连接
-    }
+    if (connection) await connection.end();
   }
 });
 
@@ -431,7 +475,7 @@ app.post('/api/course/add', async (req, res) => {
   try {
     connection = await mysql.createConnection(dbConfig);
     await connection.beginTransaction();
-    
+
     const [existRows] = await connection.execute(
       'SELECT * FROM course WHERE id = ?',
       [id]
@@ -441,17 +485,17 @@ app.post('/api/course/add', async (req, res) => {
       await connection.end();
       return res.status(409).json({ code: 409, message: '课程编号已存在' });
     }
-    
+
     await connection.execute(
-      'INSERT INTO course (id, name, startdate, enddate, teacheraccount, place, time, students, maxstu) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, name, startdate, enddate, teacheraccount, place, time, '[]', maxstu]
+      'INSERT INTO course (id, name, startdate, enddate, teacheraccount, place, time, maxstu) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name, startdate, enddate, teacheraccount, place, time, maxstu]
     );
-    
+
     await connection.execute(
       'UPDATE teacher SET courses = JSON_ARRAY_APPEND(IFNULL(courses, "[]"), "$", ?) WHERE account = ?',
       [id, teacheraccount]
     );
-    
+
     await connection.commit();
     await connection.end();
     res.json({ code: 200, message: '新增课程成功' });
@@ -465,32 +509,36 @@ app.post('/api/course/add', async (req, res) => {
   }
 });
 
-// 删除课程
 app.delete('/api/course/:id', async (req, res) => {
   const { id } = req.params;
   let connection;
   try {
     connection = await mysql.createConnection(dbConfig);
     await connection.beginTransaction();
-    
+
     const [teacherRows] = await connection.execute(
       'SELECT teacheraccount FROM course WHERE id = ?',
       [id]
     );
     const teacherAccount = teacherRows[0]?.teacheraccount;
-    
+
+    await connection.execute(
+      'DELETE FROM student_course WHERE courseid = ?',
+      [id]
+    );
+
     await connection.execute(
       'DELETE FROM course WHERE id = ?',
       [id]
     );
-    
+
     if (teacherAccount) {
       await connection.execute(
         'UPDATE teacher SET courses = JSON_REMOVE(courses, JSON_UNQUOTE(JSON_SEARCH(courses, "one", ?))) WHERE account = ?',
         [id, teacherAccount]
       );
     }
-    
+
     await connection.commit();
     await connection.end();
     res.json({ code: 200, message: '删除课程成功' });
@@ -514,14 +562,18 @@ app.put('/api/course/:id', async (req, res) => {
     await connection.beginTransaction();
     
     const [stuCountRow] = await connection.execute(
-      'SELECT JSON_LENGTH(students) AS stuNum FROM course WHERE id = ?',
+      'SELECT COUNT(*) AS stuNum FROM student_course WHERE courseid = ?',
       [id]
     );
     const currentStuNum = stuCountRow[0]?.stuNum || 0;
+    
     if (maxstu < currentStuNum) {
       await connection.rollback();
       await connection.end();
-      return res.status(400).json({ code: 400, message: '最大学生数不能小于目前学生数' });
+      return res.status(400).json({ 
+        code: 400, 
+        message: `最大学生数不能小于目前学生数（当前已选：${currentStuNum}人）` 
+      });
     }
     
     const [oldTeacherRows] = await connection.execute(
@@ -557,7 +609,10 @@ app.put('/api/course/:id', async (req, res) => {
       await connection.end();
     }
     console.error('更新课程错误：', error);
-    res.status(500).json({ code: 500, message: '服务器内部错误' });
+    res.status(500).json({ 
+      code: 500, 
+      message: '服务器内部错误，更新课程失败' 
+    });
   }
 });
 
