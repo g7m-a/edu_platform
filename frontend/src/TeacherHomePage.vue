@@ -70,7 +70,6 @@
             </div>
             
             <div class="grid-body">
-              <!-- 所有节次连续展示，去掉上午/下午/晚上分组标签 -->
               <div 
                 class="grid-row" 
                 v-for="slot in morningSlots" 
@@ -90,15 +89,18 @@
                     class="course-item"
                     v-for="course in getCourseByTime(day, slot.index)" 
                     :key="course.id"
+                    :class="{ 'conflict-course': getCourseByTime(day, slot.index).length > 1 }"
                   >
                     <div class="course-name">{{ course.name }}</div>
                     <div class="course-code">课程号：{{ course.id }}</div>
                     <div class="course-place">地点：{{ course.place || '未指定' }}</div>
+                    <div class="conflict-tag" v-if="getCourseByTime(day, slot.index).length > 1">
+                      冲突
+                    </div>
                   </div>
                 </div>
               </div>
               
-              <!-- 午休 -->
               <div class="grid-row lunch-break">
                 <div class="grid-cell time-slot">
                   <span>午休</span>
@@ -107,7 +109,6 @@
                 <div class="grid-cell class-cell" v-for="(day, index) in weekdays" :key="`lunch-${index}`"></div>
               </div>
               
-              <!-- 下午节次（无分组标签） -->
               <div 
                 class="grid-row" 
                 v-for="slot in afternoonSlots" 
@@ -127,15 +128,18 @@
                     class="course-item"
                     v-for="course in getCourseByTime(day, slot.index)" 
                     :key="course.id"
+                    :class="{ 'conflict-course': getCourseByTime(day, slot.index).length > 1 }"
                   >
                     <div class="course-name">{{ course.name }}</div>
                     <div class="course-code">课程号：{{ course.id }}</div>
                     <div class="course-place">地点：{{ course.place || '未指定' }}</div>
+                    <div class="conflict-tag" v-if="getCourseByTime(day, slot.index).length > 1">
+                      冲突
+                    </div>
                   </div>
                 </div>
               </div>
               
-              <!-- 晚上节次（无分组标签） -->
               <div 
                 class="grid-row" 
                 v-for="slot in eveningSlots" 
@@ -155,10 +159,14 @@
                     class="course-item"
                     v-for="course in getCourseByTime(day, slot.index)" 
                     :key="course.id"
+                    :class="{ 'conflict-course': getCourseByTime(day, slot.index).length > 1 }"
                   >
                     <div class="course-name">{{ course.name }}</div>
                     <div class="course-code">课程号：{{ course.id }}</div>
                     <div class="course-place">地点：{{ course.place || '未指定' }}</div>
+                    <div class="conflict-tag" v-if="getCourseByTime(day, slot.index).length > 1">
+                      冲突
+                    </div>
                   </div>
                 </div>
               </div>
@@ -191,6 +199,7 @@ export default {
       currentWeek: 1,
       semesterStart: new Date('2025-09-01'),
       weekdays: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+      conflictAlertShown: false,
       
       morningSlots: [
         { index: 1, label: '第1节', time: '08:00-08:45' },
@@ -248,6 +257,43 @@ export default {
       const end = new Date(this.getWeekStartDate(this.currentWeek));
       end.setDate(end.getDate() + 6);
       return this.formatDate(end);
+    },
+    
+    hasCourseConflict() {
+      for (const day of this.weekdays) {
+        for (const slot of this.allTimeSlots) {
+          const coursesInSlot = this.getCourseByTime(day, slot.index);
+          if (coursesInSlot.length >= 2) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    
+    conflictDetails() {
+      const conflicts = [];
+      for (const day of this.weekdays) {
+        for (const slot of this.allTimeSlots) {
+          const coursesInSlot = this.getCourseByTime(day, slot.index);
+          if (coursesInSlot.length >= 2) {
+            conflicts.push({
+              day,
+              slot: slot.label,
+              courses: coursesInSlot.map(c => c.name)
+            });
+          }
+        }
+      }
+      return conflicts;
+    }
+  },
+  watch: {
+    filteredTimetable: {
+      deep: true,
+      handler() {
+        this.checkAndAlertConflict();
+      }
     }
   },
   methods: {
@@ -264,12 +310,14 @@ export default {
       const newWeek = this.currentWeek + step;
       if (newWeek >= 1 && newWeek <= 18) {
         this.currentWeek = newWeek;
+        this.conflictAlertShown = false;
       }
     },
     
     validateWeek() {
       if (this.currentWeek < 1) this.currentWeek = 1;
       if (this.currentWeek > 18) this.currentWeek = 18;
+      this.conflictAlertShown = false;
     },
     
     getWeekStartDate(weekNum) {
@@ -297,10 +345,27 @@ export default {
     
     getCourseByTime(weekday, slotIndex) {
       return this.filteredTimetable.filter(course => {
-        return course.timeList.some(item => 
-          item.week === weekday && item.classes.includes(slotIndex)
-        );
+        return course.timeList.some(item => {
+          const weekMatch = item.week === weekday;
+          const startClass = item.classes?.[0] || 0;
+          const endClass = item.classes?.[1] || 0;
+          const classMatch = startClass <= slotIndex && slotIndex <= endClass;
+          
+          return weekMatch && classMatch;
+        });
       });
+    },
+    
+    checkAndAlertConflict() {
+      if (this.hasCourseConflict && !this.conflictAlertShown) {
+        let alertText = '⚠️ 发现授课冲突！以下节次存在多门授课安排，请尽快调整：\n';
+        this.conflictDetails.forEach(conflict => {
+          alertText += `\n${conflict.day}${conflict.slot}：${conflict.courses.join('、')}`;
+        });
+        alertText += '\n\n请联系管理员调整授课时间，避免影响教学。';
+        alert(alertText);
+        this.conflictAlertShown = true;
+      }
     },
     
     async fetchTeachingCourses() {
@@ -353,7 +418,6 @@ export default {
 </script>
 
 <style scoped>
-/* 保持原有样式不变 */
 .teacher-home-container {
   position: fixed;
   top: 0;
@@ -583,6 +647,7 @@ export default {
   margin-bottom: 8px;
   font-size: 14px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  position: relative; /* 新增：为冲突标签定位 */
 }
 
 .course-name {
@@ -625,5 +690,21 @@ export default {
     font-size: 13px;
     padding: 6px;
   }
+}
+
+.conflict-course {
+  border: 2px solid #e53e3e;
+  background-color: #fff8f8;
+}
+
+.conflict-tag {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: #e53e3e;
+  color: white;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 </style>

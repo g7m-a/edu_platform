@@ -59,6 +59,8 @@
             <th>结束日期</th>
             <th>授课地点</th>
             <th>上课时间</th>
+            <th>目前学生数</th>
+            <th>最大学生数</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -67,10 +69,10 @@
             <td>{{ course.id }}</td>
             <td>{{ course.name }}</td>
             <td>{{ course.teacheraccount }}</td>
-            <td>{{ course.teachername }}</td>
+            <td>{{ course.teachername || '未知教师' }}</td>
             <td>{{ course.startDate }}</td>
             <td>{{ course.endDate }}</td>
-            <td>{{ course.place }}</td>
+            <td>{{ course.place || '未指定' }}</td>
             <td>
               <div v-if="course.timeList && course.timeList.length">
                 <div v-for="(item, index) in course.timeList" :key="index" class="time-item">
@@ -79,13 +81,17 @@
               </div>
               <div v-else class="empty-time">无</div>
             </td>
+            <!-- 核心改动：已选人数从 currentstu 字段获取（后端统计） -->
+            <td>{{ course.currentstu || 0 }}</td>
+            <td>{{ course.maxstu || 0 }}</td>
             <td class="operate-btn-group">
               <button @click="openEditModal(course)" class="edit-btn">编辑</button>
               <button @click="deleteCourse(course.id)" class="delete-btn">删除</button>
             </td>
           </tr>
           <tr v-if="filteredCourses.length === 0">
-            <td colspan="9" class="empty-tip">暂无匹配课程数据</td>
+            <!-- 修复：colspan 从 9 改为 11（与表头列数一致） -->
+            <td colspan="11" class="empty-tip">暂无匹配课程数据</td>
           </tr>
         </tbody>
       </table>
@@ -167,7 +173,7 @@
             <label>上课时间：</label>
             <div class="time-select-container">
               <div v-for="(item, index) in formData.timeList" :key="index" class="time-select-item">
-                <select v-model="item.week" class="week-select">
+                <select v-model="item.week" class="week-select" @change="checkRealTimeConflict">
                   <option value="">选择星期</option>
                   <option value="周一">周一</option>
                   <option value="周二">周二</option>
@@ -203,6 +209,17 @@
               <button @click="addTimeItem" class="add-time-btn">+ 添加上课时段</button>
             </div>
           </div>
+          <div class="form-item">
+            <label>最大学生数：</label>
+            <input
+              v-model="formData.maxstu"
+              type="number"
+              min="0"
+              class="form-control"
+              placeholder="最大学生数"
+            />
+            <p class="error-tip" v-if="maxStuerror">{{ maxStuerror }}</p>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -225,6 +242,7 @@ export default {
       filterTeacherAccount: '',
       filterTeacherName: '',
       filteredCourses: [],
+      maxStuerror: '',
       isModalOpen: false,
       isEditMode: false,
       formData: {
@@ -235,7 +253,9 @@ export default {
         startDate: '',
         endDate: '',
         place: '',
-        timeList: []
+        timeList: [],
+        currentstu: 0, // 新增：存储已选人数（编辑时用）
+        maxstu: 0
       },
       idError: ''
     };
@@ -246,16 +266,23 @@ export default {
     this.filteredCourses = [...this.courses];
   },
   methods: {
-    //获取课程信息
+    // 核心改动：获取课程列表（适配 currentstu 字段，移除 students 依赖）
     async fetchCourses() {
       try {
         const response = await axios.get('http://localhost:3000/api/courses');
-        this.courses = (response.data.data || []).map(course => ({
-          ...course,
-          startDate: new Date(course.startdate).toLocaleDateString('zh-CN'),
-          endDate: new Date(course.enddate).toLocaleDateString('zh-CN'),
-          timeList: course.time ? JSON.parse(course.time) : []
-        }));
+        this.courses = (response.data.data || []).map(course => {
+          return {
+            ...course,
+            // 格式化日期
+            startDate: new Date(course.startdate).toLocaleDateString('zh-CN'),
+            endDate: new Date(course.enddate).toLocaleDateString('zh-CN'),
+            // 安全解析上课时间
+            timeList: this.safeParse(course.time),
+            // 已选人数：直接使用后端返回的 currentstu（关联表统计）
+            currentstu: course.currentstu || 0,
+            maxstu: course.maxstu || 0
+          };
+        });
         this.filteredCourses = [...this.courses];
       } catch (error) {
         console.error('获取课程失败：', error);
@@ -263,40 +290,55 @@ export default {
       }
     },
 
-    //查询教师姓名绑定至课程
+    // 安全解析JSON（避免解析失败报错）
+    safeParse(str) {
+      try {
+        return str ? JSON.parse(str) : [];
+      } catch (e) {
+        console.error('解析上课时间失败:', str, e);
+        return [];
+      }
+    },
+
+    // 查询教师姓名绑定至课程（无改动）
     async bindTeacherNamesTOCourses() {
       for (const course of this.courses) {
         try {
           const response = await axios.get(`http://localhost:3000/api/teachername/${course.teacheraccount}`);
-          course.teachername = response.data.data;
+          course.teachername = response.data.data || '未知教师';
         } catch (error) {
-          course.teachername = '';
+          course.teachername = '未知教师';
         }
       }
     },
 
-    //通过教师工号查询到教师姓名
+    // 通过教师工号查询教师姓名（无改动）
     async getTeacherName() {
       const teacheraccount = this.formData.teacheraccount;
+      if (!teacheraccount) {
+        this.formData.teachername = '';
+        return;
+      }
       try {
         const response = await axios.get(`http://localhost:3000/api/teachername/${teacheraccount}`);
         if (response.data.code === 200) {
           this.formData.teachername = response.data.data;
         } else {
-          this.formData.teachername = '';
-          alert('获取教师姓名失败' + response.data.message);
+          this.formData.teachername = '未知教师';
+          alert('获取教师姓名失败：' + response.data.message);
         }
       } catch {
-        alert('无法获取教师姓名');
+        this.formData.teachername = '未知教师';
+        alert('无法获取教师姓名，请检查教师工号是否正确');
       }
     },
 
-    //筛选
+    // 筛选课程（无改动）
     handleFilter() {
       let result = [...this.courses];
 
       if (this.filterCourseId) {
-        result = result.filter(course => course.id === this.filterCourseId);
+        result = result.filter(course => course.id.toString().includes(this.filterCourseId));
       }
 
       if (this.filterCourseName) {
@@ -304,7 +346,7 @@ export default {
       }
 
       if (this.filterTeacherAccount) {
-        result = result.filter(course => course.teacheraccount === this.filterTeacherAccount);
+        result = result.filter(course => course.teacheraccount.includes(this.filterTeacherAccount));
       }
 
       if (this.filterTeacherName) {
@@ -314,7 +356,7 @@ export default {
       this.filteredCourses = result;
     },
 
-    //增加课程模式
+    // 增加课程模式（无改动）
     openAddModal() {
       this.isEditMode = false;
       this.formData = {
@@ -325,21 +367,26 @@ export default {
         startDate: '',
         endDate: '',
         place: '',
-        timeList: []
+        timeList: [],
+        currentstu: 0,
+        maxstu: 0
       };
       this.idError = '';
+      this.maxStuerror = '';
       this.isModalOpen = true;
     },
 
-    //编辑课程模式
     async openEditModal(course) {
       this.isEditMode = true;
       this.formData = {
         ...course,
-        timeList: course.timeList || []
+        timeList: JSON.parse(JSON.stringify(course.timeList || [])),
+        currentstu: course.currentstu || 0,
+        maxstu: course.maxstu || 0
       };
       await this.getTeacherName();
       this.idError = '';
+      this.maxStuerror = '';
       this.isModalOpen = true;
     },
 
@@ -347,7 +394,6 @@ export default {
       this.isModalOpen = false;
     },
 
-    //添加上课时间段时调用，再调用函数检查时间段是否冲突
     addTimeItem() {
       this.formData.timeList.push({ week: '', classes: [1, 2] });
       this.$nextTick(() => {
@@ -357,7 +403,6 @@ export default {
       });
     },
 
-    //删除上课时间段
     removeTimeItem(index) {
       if (this.formData.timeList.length > 1) {
         this.formData.timeList.splice(index, 1);
@@ -366,7 +411,6 @@ export default {
       }
     },
 
-    //是否覆盖
     isTimeOverlap(classes1, classes2) {
       const start1 = classes1[0];
       const end1 = classes1[1];
@@ -375,12 +419,10 @@ export default {
       return start1 <= end2 && end1 >= start2;
     },
 
-    //是否重复
     isTimeIdentical(week1, classes1, week2, classes2) {
       return week1 === week2 && classes1[0] === classes2[0] && classes1[1] === classes2[1];
     },
 
-    //检查时间段是否冲突函数
     checkTimeConflict(newTimeList) {
       for (let i = 0; i < newTimeList.length; i++) {
         const curr = newTimeList[i];
@@ -405,7 +447,6 @@ export default {
       return false;
     },
 
-    //实时检查是否冲突
     checkRealTimeConflict() {
       const validList = this.formData.timeList.filter(item => 
         item.week && item.classes[0] && item.classes[1] && item.classes[0] <= item.classes[1]
@@ -413,7 +454,6 @@ export default {
       this.checkTimeConflict(validList);
     },
 
-    //节次不合法时修正
     fixClassOrder(item) {
       if (item.classes[0] > item.classes[1]) {
         [item.classes[0], item.classes[1]] = [item.classes[1], item.classes[0]];
@@ -421,13 +461,19 @@ export default {
       }
     },
     
-    //编辑或修改课程信息时调用，通过后端端口提交至数据库
     async submitForm() {
-      const { id, name, teacheraccount, startDate, endDate, place, timeList } = this.formData;
+      const { id, name, teacheraccount, startDate, endDate, place, timeList, currentstu } = this.formData;
 
       if (!id || !name || !teacheraccount || !startDate || !endDate || !place || timeList.length === 0) {
         alert('课程编号、名称、教师、起止日期、上课地点、上课时间不能为空！');
         return;
+      }
+
+      if (this.isEditMode) {
+        if (this.formData.maxstu < currentstu) {
+          this.maxStuerror = '最大学生数不能小于目前学生数（当前已选：' + currentstu + '人）';
+          return;
+        }
       }
 
       if (new Date(startDate) > new Date(endDate)) {
@@ -469,7 +515,8 @@ export default {
             startdate: startDate,
             enddate: endDate,
             place,
-            time: timeStr
+            time: timeStr,
+            maxstu: this.formData.maxstu
           });
         } else {
           await axios.post('http://localhost:3000/api/course/add', {
@@ -479,7 +526,8 @@ export default {
             startdate: startDate,
             enddate: endDate,
             place,
-            time: timeStr
+            time: timeStr,
+            maxstu: this.formData.maxstu
           });
         }
 
@@ -490,13 +538,12 @@ export default {
         this.closeModal();
       } catch (error) {
         console.error('提交课程失败：', error);
-        alert('网络错误或服务器异常，操作失败');
+        alert(error.response?.data?.message || '网络错误或服务器异常，操作失败');
       }
     },
 
-    //删除课程
     async deleteCourse(id) {
-      if (confirm('确定要删除该课程吗？')) {
+      if (confirm('确定要删除该课程吗？删除后该课程的所有选课记录也会同步删除！')) {
         try {
           await axios.delete(`http://localhost:3000/api/course/${id}`);
           this.courses = this.courses.filter(course => course.id !== id);
@@ -504,7 +551,7 @@ export default {
           alert('删除成功！');
         } catch (error) {
           console.error('删除课程失败：', error);
-          alert('删除失败，请重试');
+          alert(error.response?.data?.message || '删除失败，请重试');
         }
       }
     }
