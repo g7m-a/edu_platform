@@ -617,6 +617,32 @@ app.post('/api/homework/delete', async (req, res) => {
   }
 });
 
+// 获取单个作业详情
+app.get('/api/homework/detail/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    const [rows] = await connection.execute(
+      `SELECT h.*, c.name AS course_name, t.name AS teacher_name
+       FROM homework h
+       LEFT JOIN course c ON h.course_id = c.id
+       LEFT JOIN teacher t ON h.teacher_id = t.account
+       WHERE h.id = ?`,
+      [id]
+    );
+    await connection.end();
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ code: 404, message: '作业不存在' });
+    }
+    
+    res.json({ code: 200, data: rows[0] });
+  } catch (error) {
+    console.error('获取作业详情失败：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
 // 获取学生作业列表
 app.get('/api/homework/student/list', async (req, res) => {
   const { student_id } = req.query;

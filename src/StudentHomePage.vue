@@ -213,7 +213,7 @@
                 <button 
                   v-if="hw.status === 0 || hw.status === 1" 
                   class="action-btn submit-btn"
-                  @click="openSubmitModal(hw)"
+                  @click="goToSubmitPage(hw)"
                 >
                   {{ hw.status === 0 ? '提交作业' : '修改提交' }}
                 </button>
@@ -222,26 +222,6 @@
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 提交作业弹窗 -->
-      <div v-if="showSubmitModal" class="modal-overlay" @click.self="closeSubmitModal">
-        <div class="modal-content">
-          <h3 class="modal-title">提交作业 - {{ currentHomework?.title }}</h3>
-          <div class="form-group">
-            <label class="form-label">作业内容</label>
-            <textarea 
-              v-model="submitContent" 
-              class="form-textarea"
-              placeholder="请输入作业内容..."
-              rows="6"
-            ></textarea>
-          </div>
-          <div class="modal-actions">
-            <button class="cancel-btn" @click="closeSubmitModal">取消</button>
-            <button class="confirm-btn" @click="submitHomework" :disabled="!submitContent.trim()">提交</button>
           </div>
         </div>
       </div>
@@ -268,9 +248,6 @@ export default {
       // 作业相关数据
       homeworkList: [],
       loadingHomework: false,
-      showSubmitModal: false,
-      currentHomework: null,
-      submitContent: '',
       
       morningSlots: [
         { index: 1, label: '第1节', time: '08:00-08:45' },
@@ -570,38 +547,8 @@ export default {
       return `${year}-${month}-${day} ${hours}:${minutes}`;
     },
 
-    openSubmitModal(homework) {
-      this.currentHomework = homework;
-      this.submitContent = homework.submit_content || '';
-      this.showSubmitModal = true;
-    },
-
-    closeSubmitModal() {
-      this.showSubmitModal = false;
-      this.currentHomework = null;
-      this.submitContent = '';
-    },
-
-    async submitHomework() {
-      if (!this.currentHomework || !this.submitContent.trim()) return;
-      
-      try {
-        const res = await axios.post('http://localhost:3000/api/homework/submit', {
-          id: this.currentHomework.sh_id,
-          submit_content: this.submitContent
-        });
-        
-        if (res.data.code === 200) {
-          alert('作业提交成功！');
-          this.closeSubmitModal();
-          this.fetchHomeworkList(); // 刷新列表
-        } else {
-          alert('提交失败：' + res.data.message);
-        }
-      } catch (err) {
-        console.error('提交作业错误:', err);
-        alert('网络错误，提交失败');
-      }
+    goToSubmitPage(homework) {
+      this.router.push(`/homework/submit/${homework.sh_id}`);
     }
   },
   mounted() {
