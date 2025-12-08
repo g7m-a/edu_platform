@@ -617,6 +617,92 @@ app.post('/api/homework/delete', async (req, res) => {
   }
 });
 
+// 获取学生作业列表
+app.get('/api/homework/student/list', async (req, res) => {
+  const { student_id } = req.query;
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    const [rows] = await connection.execute(
+      `SELECT sh.id AS sh_id, sh.status, sh.score, sh.comment, sh.submit_time, sh.correct_time, sh.submit_content,
+              h.id AS homework_id, h.title, h.content, h.ddl,
+              c.name AS course_name, t.name AS teacher_name
+       FROM student_homework sh
+       JOIN homework h ON sh.homework_id = h.id
+       JOIN course c ON h.course_id = c.id
+       LEFT JOIN teacher t ON h.teacher_id = t.account
+       WHERE sh.student_id = ?
+       ORDER BY h.ddl DESC`,
+      [student_id]
+    );
+    await connection.end();
+    res.json({ code: 200, data: rows });
+  } catch (error) {
+    console.error('获取学生作业列表错误：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// 学生提交作业
+app.post('/api/homework/submit', async (req, res) => {
+  const { id, submit_content } = req.body; // id is student_homework id
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    const now = new Date();
+    await connection.execute(
+      `UPDATE student_homework 
+       SET status = 1, submit_content = ?, submit_time = ? 
+       WHERE id = ?`,
+      [submit_content, now, id]
+    );
+    await connection.end();
+    res.json({ code: 200, message: '作业提交成功' });
+  } catch (error) {
+    console.error('作业提交失败：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// 教师获取某作业的所有提交记录
+app.get('/api/homework/submissions', async (req, res) => {
+  const { homework_id } = req.query;
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    const [rows] = await connection.execute(
+      `SELECT sh.*, s.name AS student_name, s.account AS student_account
+       FROM student_homework sh
+       JOIN student s ON sh.student_id = s.account
+       WHERE sh.homework_id = ?
+       ORDER BY sh.status DESC, sh.submit_time ASC`, // 已提交的排前面
+      [homework_id]
+    );
+    await connection.end();
+    res.json({ code: 200, data: rows });
+  } catch (error) {
+    console.error('获取作业提交记录失败：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// 教师批改作业
+app.post('/api/homework/grade', async (req, res) => {
+  const { id, score, comment } = req.body; // id is student_homework id
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    const now = new Date();
+    await connection.execute(
+      `UPDATE student_homework 
+       SET status = 2, score = ?, comment = ?, correct_time = ? 
+       WHERE id = ?`,
+      [score, comment, now, id]
+    );
+    await connection.end();
+    res.json({ code: 200, message: '批改成功' });
+  } catch (error) {
+    console.error('批改作业失败：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
 // 添加课程
 app.post('/api/course/add', async (req, res) => {
   const { id, name, startdate, enddate, teacheraccount, place, time, maxstu } = req.body;

@@ -247,12 +247,103 @@
             <div class="homework-meta">
               <span>课程：{{ getCourseName(item.course_id) }}</span>
               <span>截止时间：{{ formatShowTime(item.ddl) }}</span>
-              <button class="delete-btn" @click="deleteHomework(item.id)">删除</button>
+              <div class="hw-controls">
+                <button class="view-btn" @click="viewSubmissions(item)">查看提交</button>
+                <button class="delete-btn" @click="deleteHomework(item.id)">删除</button>
+              </div>
             </div>
           </div>
         </div>
         <div v-else class="state-container empty">
           <span>暂无已发布作业</span>
+        </div>
+      </div>
+
+      <!-- 提交记录弹窗 -->
+      <div v-if="showSubmissionModal" class="modal-overlay" @click.self="closeSubmissionModal">
+        <div class="modal-content large-modal">
+          <div class="modal-header">
+            <h3 class="modal-title">提交记录 - {{ currentHomeworkTitle }}</h3>
+            <button class="close-icon" @click="closeSubmissionModal">×</button>
+          </div>
+          
+          <div class="submission-list">
+            <div class="list-header">
+              <span class="col-stu">学生</span>
+              <span class="col-status">状态</span>
+              <span class="col-time">提交时间</span>
+              <span class="col-content">提交内容</span>
+              <span class="col-score">成绩</span>
+              <span class="col-action">操作</span>
+            </div>
+            
+            <div v-if="submissions.length === 0" class="empty-submissions">
+              暂无学生提交
+            </div>
+            
+            <div v-else v-for="sub in submissions" :key="sub.id" class="submission-item">
+              <span class="col-stu">{{ sub.student_name }}<br><small>{{ sub.student_account }}</small></span>
+              <span class="col-status" :class="getStatusClass(sub.status)">{{ getStatusText(sub.status) }}</span>
+              <span class="col-time">{{ formatShowTime(sub.submit_time) || '-' }}</span>
+              <div class="col-content content-box" :title="sub.submit_content">
+                {{ sub.submit_content || '-' }}
+              </div>
+              <div class="col-score">
+                <input 
+                  type="number" 
+                  v-model.number="sub.tempScore" 
+                  class="score-input"
+                  placeholder="分"
+                  :disabled="sub.status === 0"
+                >
+              </div>
+              <div class="col-action">
+                <button 
+                  class="grade-btn" 
+                  @click="openGradeModal(sub)"
+                  :disabled="sub.status === 0"
+                >
+                  {{ sub.status === 2 ? '修改' : '批改' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 批改弹窗 -->
+      <div v-if="showGradeModal" class="modal-overlay" style="z-index: 1100;">
+        <div class="modal-content">
+          <h3 class="modal-title">批改作业 - {{ currentSubmission?.student_name }}</h3>
+          <div class="form-group">
+            <label class="form-label">提交内容</label>
+            <div class="student-content-view">
+              {{ currentSubmission?.submit_content }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">评分 (0-100)</label>
+            <input 
+              type="number" 
+              v-model.number="gradeForm.score" 
+              class="form-input"
+              min="0"
+              max="100"
+            >
+          </div>
+          <div class="form-group">
+            <label class="form-label">评语</label>
+            <textarea 
+              v-model="gradeForm.comment" 
+              class="form-textarea"
+              rows="3"
+              placeholder="请输入评语..."
+            ></textarea>
+          </div>
+          <div class="modal-actions">
+            <button class="cancel-btn" @click="closeGradeModal">取消</button>
+            <button class="confirm-btn" @click="submitGrade">确认批改</button>
+          </div>
         </div>
       </div>
     </div>
@@ -281,6 +372,18 @@ export default {
         deadline: ''
       },
       publishedHomeworks: [],
+      
+      // 批改相关
+      showSubmissionModal: false,
+      showGradeModal: false,
+      submissions: [],
+      currentHomeworkTitle: '',
+      currentSubmission: null,
+      gradeForm: {
+        score: '',
+        comment: ''
+      },
+
       morningSlots: [
         { index: 1, label: '第1节', time: '08:00-08:45' },
         { index: 2, label: '第2节', time: '08:55-09:40' },
@@ -568,6 +671,93 @@ export default {
         console.error('删除作业失败:', err);
         alert('网络错误，作业删除失败，请重试');
       }
+    },
+
+    // 批改相关方法
+    async viewSubmissions(homework) {
+      this.currentHomeworkTitle = homework.title;
+      try {
+        const res = await axios.get('http://localhost:3000/api/homework/submissions', {
+          params: { homework_id: homework.id }
+        });
+        if (res.data.code === 200) {
+          this.submissions = (res.data.data || []).map(item => ({
+            ...item,
+            tempScore: item.score // 用于快速评分
+          }));
+          this.showSubmissionModal = true;
+        }
+      } catch (err) {
+        console.error('获取提交记录失败:', err);
+        alert('获取提交记录失败');
+      }
+    },
+
+    closeSubmissionModal() {
+      this.showSubmissionModal = false;
+      this.submissions = [];
+      this.currentHomeworkTitle = '';
+    },
+
+    getStatusText(status) {
+      const map = { 0: '未提交', 1: '待批改', 2: '已批改' };
+      return map[status] || '未知';
+    },
+
+    getStatusClass(status) {
+      const map = { 0: 'status-unsubmitted', 1: 'status-submitted', 2: 'status-graded' };
+      return map[status] || '';
+    },
+
+    openGradeModal(submission) {
+      this.currentSubmission = submission;
+      this.gradeForm = {
+        score: submission.tempScore !== null ? submission.tempScore : (submission.score || ''),
+        comment: submission.comment || ''
+      };
+      this.showGradeModal = true;
+    },
+
+    closeGradeModal() {
+      this.showGradeModal = false;
+      this.currentSubmission = null;
+      this.gradeForm = { score: '', comment: '' };
+    },
+
+    async submitGrade() {
+      if (this.gradeForm.score === '' || this.gradeForm.score < 0 || this.gradeForm.score > 100) {
+        alert('请输入有效的0-100分数');
+        return;
+      }
+
+      try {
+        const res = await axios.post('http://localhost:3000/api/homework/grade', {
+          id: this.currentSubmission.id,
+          score: this.gradeForm.score,
+          comment: this.gradeForm.comment
+        });
+
+        if (res.data.code === 200) {
+          alert('批改成功！');
+          
+          // 更新本地数据
+          const index = this.submissions.findIndex(s => s.id === this.currentSubmission.id);
+          if (index !== -1) {
+            this.submissions[index].status = 2;
+            this.submissions[index].score = this.gradeForm.score;
+            this.submissions[index].tempScore = this.gradeForm.score;
+            this.submissions[index].comment = this.gradeForm.comment;
+            this.submissions[index].correct_time = new Date();
+          }
+          
+          this.closeGradeModal();
+        } else {
+          alert('批改失败：' + res.data.message);
+        }
+      } catch (err) {
+        console.error('批改失败:', err);
+        alert('网络错误，批改失败');
+      }
     }
   },
   mounted() {
@@ -632,6 +822,222 @@ export default {
   font-weight: 600;
   color: #333;
   margin: 0;
+}
+
+.homework-meta .hw-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.view-btn {
+  background-color: #38a169;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.view-btn:hover {
+  background-color: #2f855a;
+}
+
+/* 提交记录列表样式 */
+.large-modal {
+  width: 900px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.close-icon {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.close-icon:hover {
+  color: #333;
+}
+
+.submission-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 6px;
+}
+
+.list-header, .submission-item {
+  display: grid;
+  grid-template-columns: 150px 80px 140px 1fr 80px 80px;
+  gap: 10px;
+  padding: 12px;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+
+.list-header {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #4a5568;
+  position: sticky;
+  top: 0;
+}
+
+.submission-item:hover {
+  background-color: #f8fff9;
+}
+
+.col-stu small {
+  color: #999;
+}
+
+.status-unsubmitted { color: #e53e3e; }
+.status-submitted { color: #3182ce; }
+.status-graded { color: #38a169; }
+
+.content-box {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #666;
+  font-size: 13px;
+}
+
+.score-input {
+  width: 50px;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.grade-btn {
+  background-color: #4299e1;
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.grade-btn:disabled {
+  background-color: #cbd5e0;
+  cursor: not-allowed;
+}
+
+.grade-btn:hover:not(:disabled) {
+  background-color: #3182ce;
+}
+
+.empty-submissions {
+  padding: 30px;
+  text-align: center;
+  color: #999;
+}
+
+.student-content-view {
+  background: #f7fafc;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #edf2f7;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 14px;
+  color: #2d3748;
+}
+
+/* 弹窗通用样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  width: 500px;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.modal-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancel-btn {
+  padding: 8px 20px;
+  background: white;
+  border: 1px solid #cbd5e0;
+  color: #4a5568;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.confirm-btn {
+  padding: 8px 20px;
+  background: #4299e1;
+  border: none;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .week-control {

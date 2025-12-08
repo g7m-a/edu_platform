@@ -179,9 +179,70 @@
       </div>
 
       <div class="homework-section">
-        <h2 class="section-title">已选课程作业提示</h2>
-        <div class="state-container empty homework-placeholder">
-          <span>作业提示信息即将上线</span>
+        <h2 class="section-title">我的作业</h2>
+        
+        <div v-if="loadingHomework" class="state-container loading">
+          <span>加载作业中...</span>
+        </div>
+        
+        <div v-else-if="homeworkList.length === 0" class="state-container empty">
+          <span>暂无作业</span>
+        </div>
+        
+        <div v-else class="homework-list">
+          <div v-for="hw in homeworkList" :key="hw.sh_id" class="homework-card">
+            <div class="hw-header">
+              <span class="hw-course">{{ hw.course_name }}</span>
+              <span class="hw-status" :class="getStatusClass(hw.status)">{{ getStatusText(hw.status) }}</span>
+            </div>
+            <h3 class="hw-title">{{ hw.title }}</h3>
+            <p class="hw-content">{{ hw.content }}</p>
+            <div class="hw-meta">
+              <span>截止时间：{{ formatShowTime(hw.ddl) }}</span>
+              <span>教师：{{ hw.teacher_name || '未知' }}</span>
+            </div>
+            
+            <!-- 提交/详情区域 -->
+            <div class="hw-action-area">
+              <div v-if="hw.status === 2" class="grade-info">
+                <div class="score-display">得分：<span class="score-value">{{ hw.score }}</span></div>
+                <div class="teacher-comment" v-if="hw.comment">评语：{{ hw.comment }}</div>
+              </div>
+              
+              <div class="action-buttons">
+                <button 
+                  v-if="hw.status === 0 || hw.status === 1" 
+                  class="action-btn submit-btn"
+                  @click="openSubmitModal(hw)"
+                >
+                  {{ hw.status === 0 ? '提交作业' : '修改提交' }}
+                </button>
+                <div v-if="hw.status === 1" class="submitted-info">
+                  已提交于 {{ formatShowTime(hw.submit_time) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 提交作业弹窗 -->
+      <div v-if="showSubmitModal" class="modal-overlay" @click.self="closeSubmitModal">
+        <div class="modal-content">
+          <h3 class="modal-title">提交作业 - {{ currentHomework?.title }}</h3>
+          <div class="form-group">
+            <label class="form-label">作业内容</label>
+            <textarea 
+              v-model="submitContent" 
+              class="form-textarea"
+              placeholder="请输入作业内容..."
+              rows="6"
+            ></textarea>
+          </div>
+          <div class="modal-actions">
+            <button class="cancel-btn" @click="closeSubmitModal">取消</button>
+            <button class="confirm-btn" @click="submitHomework" :disabled="!submitContent.trim()">提交</button>
+          </div>
         </div>
       </div>
     </div>
@@ -203,6 +264,13 @@ export default {
       semesterStart: new Date('2025-09-01'),
       weekdays: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
       conflictAlertShown: false,
+      
+      // 作业相关数据
+      homeworkList: [],
+      loadingHomework: false,
+      showSubmitModal: false,
+      currentHomework: null,
+      submitContent: '',
       
       morningSlots: [
         { index: 1, label: '第1节', time: '08:00-08:45' },
@@ -460,6 +528,80 @@ export default {
       const weekNum = Math.floor(diffDays / 7) + 1;
       this.currentWeek = Math.min(Math.max(weekNum, 1), 18);
       console.log('计算得到当前周:', this.currentWeek, '相差天数:', diffDays);
+    },
+
+    // 作业相关方法
+    async fetchHomeworkList() {
+      if (!this.student?.account) return;
+      this.loadingHomework = true;
+      try {
+        const res = await axios.get('http://localhost:3000/api/homework/student/list', {
+          params: { student_id: this.student.account }
+        });
+        if (res.data.code === 200) {
+          this.homeworkList = res.data.data || [];
+        }
+      } catch (err) {
+        console.error('获取作业列表失败:', err);
+      } finally {
+        this.loadingHomework = false;
+      }
+    },
+
+    getStatusText(status) {
+      const map = { 0: '未提交', 1: '已提交', 2: '已批改' };
+      return map[status] || '未知';
+    },
+
+    getStatusClass(status) {
+      const map = { 0: 'status-unsubmitted', 1: 'status-submitted', 2: 'status-graded' };
+      return map[status] || '';
+    },
+
+    formatShowTime(timeStr) {
+      if (!timeStr) return '无';
+      const date = new Date(timeStr);
+      if (isNaN(date.getTime())) return '无效时间';
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    },
+
+    openSubmitModal(homework) {
+      this.currentHomework = homework;
+      this.submitContent = homework.submit_content || '';
+      this.showSubmitModal = true;
+    },
+
+    closeSubmitModal() {
+      this.showSubmitModal = false;
+      this.currentHomework = null;
+      this.submitContent = '';
+    },
+
+    async submitHomework() {
+      if (!this.currentHomework || !this.submitContent.trim()) return;
+      
+      try {
+        const res = await axios.post('http://localhost:3000/api/homework/submit', {
+          id: this.currentHomework.sh_id,
+          submit_content: this.submitContent
+        });
+        
+        if (res.data.code === 200) {
+          alert('作业提交成功！');
+          this.closeSubmitModal();
+          this.fetchHomeworkList(); // 刷新列表
+        } else {
+          alert('提交失败：' + res.data.message);
+        }
+      } catch (err) {
+        console.error('提交作业错误:', err);
+        alert('网络错误，提交失败');
+      }
     }
   },
   mounted() {
@@ -472,6 +614,7 @@ export default {
         console.log('解析后的学生信息:', this.student);
         this.calculateCurrentWeek();
         this.fetchSelectedCourses();
+        this.fetchHomeworkList(); // 加载作业
       } else {
         console.log('localStorage中无studentInfo');
         alert('请先登录');
@@ -723,6 +866,208 @@ export default {
   color: #1a73e8;
   margin-bottom: 4px;
   white-space: nowrap;
+}
+
+/* 作业相关样式 */
+.homework-list {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.homework-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  border: 1px solid #eee;
+}
+
+.hw-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.hw-course {
+  color: #666;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.hw-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.status-unsubmitted { color: #e53e3e; background: #fff5f5; }
+.status-submitted { color: #3182ce; background: #ebf8ff; }
+.status-graded { color: #38a169; background: #f0fff4; }
+
+.hw-title {
+  font-size: 18px;
+  color: #333;
+  margin: 0 0 10px 0;
+}
+
+.hw-content {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 15px;
+  white-space: pre-wrap;
+}
+
+.hw-meta {
+  font-size: 12px;
+  color: #999;
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 15px;
+}
+
+.hw-action-area {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.grade-info {
+  background: #f8fff9;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #c6f6d5;
+  flex: 1;
+  margin-right: 20px;
+}
+
+.score-display {
+  font-weight: bold;
+  color: #2f855a;
+}
+
+.score-value {
+  font-size: 20px;
+  margin-left: 5px;
+}
+
+.teacher-comment {
+  font-size: 13px;
+  color: #666;
+  margin-top: 5px;
+}
+
+.action-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.submit-btn {
+  background-color: #4299e1;
+  color: white;
+}
+
+.submit-btn:hover {
+  background-color: #3182ce;
+}
+
+.submitted-info {
+  font-size: 12px;
+  color: #3182ce;
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  width: 500px;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.modal-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancel-btn {
+  padding: 8px 20px;
+  background: white;
+  border: 1px solid #cbd5e0;
+  color: #4a5568;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.confirm-btn {
+  padding: 8px 20px;
+  background: #4299e1;
+  border: none;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.confirm-btn:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+}
   overflow: hidden;
   text-overflow: ellipsis;
 }
