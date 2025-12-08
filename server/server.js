@@ -2,7 +2,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const app = express();
-app.use(cors({ origin: 'http://localhost:5173' }));//置换成本机前端运行端口
+app.use(cors()); // 允许所有跨域请求，避免前端端口变化导致CORS错误
 app.use(express.json());
 const dbConfig = {
   host: 'localhost',
@@ -878,4 +878,6 @@ app.post('/api/admin/login', async (req, res) => {
   }
 });
 
-app.listen(3000, () => {});//后端运行端口，被占用就换
+app.listen(3000, () => {
+  console.log('Server running on http://localhost:3000');
+});//后端运行端口，被占用就换
