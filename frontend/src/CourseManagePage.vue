@@ -86,6 +86,7 @@
             <td>{{ course.maxstu || 0 }}</td>
             <td class="operate-btn-group">
               <button @click="openEditModal(course)" class="edit-btn">编辑</button>
+              <button @click="openStudentModal(course)" class="student-btn">学生管理</button>
               <button @click="deleteCourse(course.id)" class="delete-btn">删除</button>
             </td>
           </tr>
@@ -220,11 +221,87 @@
             />
             <p class="error-tip" v-if="maxStuerror">{{ maxStuerror }}</p>
           </div>
+
+          <div class="form-item">
+            <label>学分：</label>
+            <input
+              v-model="formData.credit"
+              type="number"
+              min="0"
+              step="0.5"
+              class="form-control"
+              placeholder="课程学分"
+            />
+          </div>
+
+          <div class="form-item">
+            <label>考试占比 (%)：</label>
+            <input
+              v-model="formData.testratio"
+              type="number"
+              min="0"
+              max="100"
+              class="form-control"
+              placeholder="考试成绩占比 (0-100)"
+            />
+          </div>
         </div>
 
         <div class="modal-footer">
           <button @click="closeModal" class="cancel-btn">取消</button>
           <button @click="submitForm" class="confirm-btn">确认</button>
+        </div>
+      </div>
+    </div>
+    <!-- 学生管理弹窗 -->
+    <div class="modal-mask" v-if="isStudentModalOpen">
+      <div class="modal-container student-manage-modal">
+        <div class="modal-header">
+          <h3>{{ currentCourseName }} - 学生管理</h3>
+          <button @click="closeStudentModal" class="close-btn">×</button>
+        </div>
+        <div class="modal-body-student">
+           <div class="student-actions">
+              <div class="add-student-group">
+                 <input v-model="newStudentId" placeholder="输入学号" class="form-control small-input" />
+                 <button @click="addStudent" class="add-btn-small">添加学生</button>
+              </div>
+              <button class="export-btn" @click="exportStudents">导出名单</button>
+           </div>
+           
+           <div class="table-container-student">
+             <table class="student-table">
+                <thead>
+                  <tr>
+                     <th>学号</th>
+                     <th>姓名</th>
+                     <th>学院</th>
+                     <th>年级</th>
+                     <th>平时分</th>
+                     <th>考试分</th>
+                     <th>总评</th>
+                     <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="stu in currentCourseStudents" :key="stu.account">
+                     <td>{{ stu.account }}</td>
+                     <td>{{ stu.name }}</td>
+                     <td>{{ stu.dept }}</td>
+                     <td>{{ stu.grade }}</td>
+                     <td>{{ stu.regular_score || '-' }}</td>
+                     <td>{{ stu.exam_score || '-' }}</td>
+                     <td>{{ stu.score || '-' }}</td>
+                     <td>
+                        <button @click="removeStudent(stu.account)" class="delete-btn-small">移除</button>
+                     </td>
+                  </tr>
+                  <tr v-if="currentCourseStudents.length === 0">
+                     <td colspan="8" class="empty-text">暂无学生</td>
+                  </tr>
+                </tbody>
+             </table>
+           </div>
         </div>
       </div>
     </div>
@@ -255,9 +332,18 @@ export default {
         place: '',
         timeList: [],
         currentstu: 0, // 新增：存储已选人数（编辑时用）
-        maxstu: 0
+        maxstu: 0,
+        credit: '',
+        testratio: ''
       },
-      idError: ''
+      idError: '',
+      
+      // Student Manage Data
+      isStudentModalOpen: false,
+      currentCourseStudents: [],
+      currentCourseName: '',
+      currentCourseId: null,
+      newStudentId: ''
     };
   },
   async mounted() {
@@ -280,7 +366,9 @@ export default {
             timeList: this.safeParse(course.time),
             // 已选人数：直接使用后端返回的 currentstu（关联表统计）
             currentstu: course.currentstu || 0,
-            maxstu: course.maxstu || 0
+            maxstu: course.maxstu || 0,
+            credit: course.credit || 0,
+            testratio: course.testratio || 0
           };
         });
         this.filteredCourses = [...this.courses];
@@ -367,9 +455,11 @@ export default {
         startDate: '',
         endDate: '',
         place: '',
-        timeList: [],
+        timeList: [{ week: '', classes: [1, 2] }], // 默认添加一个时间段
         currentstu: 0,
-        maxstu: 0
+        maxstu: 0,
+        credit: '',
+        testratio: ''
       };
       this.idError = '';
       this.maxStuerror = '';
@@ -382,7 +472,9 @@ export default {
         ...course,
         timeList: JSON.parse(JSON.stringify(course.timeList || [])),
         currentstu: course.currentstu || 0,
-        maxstu: course.maxstu || 0
+        maxstu: course.maxstu || 0,
+        credit: course.credit || 0,
+        testratio: course.testratio || 0
       };
       await this.getTeacherName();
       this.idError = '';
@@ -462,10 +554,20 @@ export default {
     },
     
     async submitForm() {
-      const { id, name, teacheraccount, startDate, endDate, place, timeList, currentstu } = this.formData;
+      const { id, name, teacheraccount, startDate, endDate, place, timeList, currentstu, credit, testratio } = this.formData;
 
       if (!id || !name || !teacheraccount || !startDate || !endDate || !place || timeList.length === 0) {
         alert('课程编号、名称、教师、起止日期、上课地点、上课时间不能为空！');
+        return;
+      }
+
+      if (credit === '' || testratio === '') {
+        alert('学分和考试占比不能为空！');
+        return;
+      }
+      
+      if (testratio < 0 || testratio > 100) {
+        alert('考试占比必须在 0 到 100 之间！');
         return;
       }
 
@@ -516,7 +618,9 @@ export default {
             enddate: endDate,
             place,
             time: timeStr,
-            maxstu: this.formData.maxstu
+            maxstu: this.formData.maxstu,
+            credit: this.formData.credit,
+            testratio: this.formData.testratio
           });
         } else {
           await axios.post('http://localhost:3000/api/course/add', {
@@ -527,7 +631,9 @@ export default {
             enddate: endDate,
             place,
             time: timeStr,
-            maxstu: this.formData.maxstu
+            maxstu: this.formData.maxstu,
+            credit: this.formData.credit,
+            testratio: this.formData.testratio
           });
         }
 
@@ -540,6 +646,103 @@ export default {
         console.error('提交课程失败：', error);
         alert(error.response?.data?.message || '网络错误或服务器异常，操作失败');
       }
+    },
+
+    openStudentModal(course) {
+      this.currentCourseName = course.name;
+      this.currentCourseId = course.id;
+      this.isStudentModalOpen = true;
+      this.fetchCourseStudents(course.id);
+    },
+    
+    closeStudentModal() {
+      this.isStudentModalOpen = false;
+      this.currentCourseStudents = [];
+      this.newStudentId = '';
+    },
+    
+    async fetchCourseStudents(courseId) {
+      try {
+        const res = await axios.get(`http://localhost:3000/api/course/${courseId}/students`);
+        if (res.data.code === 200) {
+          this.currentCourseStudents = res.data.data || [];
+        }
+      } catch (err) {
+        console.error('获取学生列表失败:', err);
+        alert('获取学生列表失败');
+      }
+    },
+    
+    async addStudent() {
+      if (!this.newStudentId) {
+        alert('请输入学号');
+        return;
+      }
+      try {
+        const res = await axios.post(`http://localhost:3000/api/course/${this.currentCourseId}/student`, {
+          studentId: this.newStudentId
+        });
+        if (res.data.code === 200) {
+          alert('添加成功');
+          this.newStudentId = '';
+          this.fetchCourseStudents(this.currentCourseId);
+          await this.fetchCourses();
+          await this.bindTeacherNamesTOCourses();
+          this.filteredCourses = [...this.courses];
+        }
+      } catch (err) {
+        console.error('添加学生失败:', err);
+        alert(err.response?.data?.message || '添加失败');
+      }
+    },
+    
+    async removeStudent(studentId) {
+      if (!confirm(`确定要移除学生 ${studentId} 吗？`)) return;
+      try {
+        const res = await axios.delete(`http://localhost:3000/api/course/${this.currentCourseId}/student/${studentId}`);
+        if (res.data.code === 200) {
+          alert('移除成功');
+          this.fetchCourseStudents(this.currentCourseId);
+          await this.fetchCourses();
+          await this.bindTeacherNamesTOCourses();
+          this.filteredCourses = [...this.courses];
+        }
+      } catch (err) {
+        console.error('移除学生失败:', err);
+        alert('移除失败');
+      }
+    },
+    
+    exportStudents() {
+      if (!this.currentCourseStudents.length) {
+        alert('暂无数据可导出');
+        return;
+      }
+      
+      let csvContent = "学号,姓名,学院,年级,平时分,考试分,总评\n";
+      
+      this.currentCourseStudents.forEach(stu => {
+        const row = [
+          stu.account,
+          stu.name,
+          stu.dept,
+          stu.grade,
+          stu.regular_score || '',
+          stu.exam_score || '',
+          stu.score || ''
+        ];
+        csvContent += row.join(",") + "\n";
+      });
+      
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${this.currentCourseName}_学生名单.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     },
 
     async deleteCourse(id) {
@@ -725,6 +928,9 @@ export default {
 .modal-container {
   width: 100%;
   max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
   background-color: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
@@ -732,6 +938,7 @@ export default {
 }
 
 .modal-header {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -763,12 +970,23 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .form-item {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.modal-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 15px 20px;
+  border-top: 1px solid #eee;
 }
 
 .form-item label {
@@ -1018,5 +1236,121 @@ export default {
 .empty-time {
   color: #999;
   font-size: 14px;
+}
+
+/* Student Management Modal Styles */
+.student-manage-modal {
+  width: 900px;
+  max-width: 95vw;
+}
+
+.modal-body-student {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  height: 100%;
+  overflow: hidden;
+  flex: 1;
+}
+
+.student-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.add-student-group {
+  display: flex;
+  gap: 10px;
+}
+
+.small-input {
+  width: 150px;
+  padding: 6px 10px;
+}
+
+.add-btn-small {
+  background-color: #42b983;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.add-btn-small:hover {
+  background-color: #359e6d;
+}
+
+.export-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-btn:hover {
+  background-color: #218838;
+}
+
+.table-container-student {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.student-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.student-table th,
+.student-table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  color: #333; /* Darker text color */
+}
+
+.student-table th {
+  background-color: #f9fafc;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #000; /* Even darker for headers */
+  font-weight: 600;
+}
+
+.delete-btn-small {
+  background-color: #ff4d4f;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.delete-btn-small:hover {
+  background-color: #d9363e;
+}
+
+.student-btn {
+  background-color: #1890ff;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-right: 5px;
+  transition: background-color 0.3s;
+}
+
+.student-btn:hover {
+  background-color: #40a9ff;
 }
 </style>

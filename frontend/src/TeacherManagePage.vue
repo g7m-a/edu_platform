@@ -70,6 +70,7 @@
             </td>
             <td class="operate-btn-group">
               <button @click="openEditModal(teacher)" class="edit-btn">编辑</button>
+              <button @click="resetPassword(teacher.account)" class="reset-btn">重置密码</button>
               <!-- 有课程时禁用删除按钮并添加提示 -->
               <button 
                 @click="showDeleteConfirm(teacher.account)" 
@@ -294,7 +295,7 @@ export default {
       );
       if (response.data.code === 200) {
         alert('编辑成功！');
-        this.fetchTeachers();
+        await this.fetchTeachers();
         this.closeModal();
       } else {
         alert('编辑失败：' + response.data.message);
@@ -306,7 +307,7 @@ export default {
       );
       if (response.data.code === 200) {
         alert('新增成功！');
-        this.fetchTeachers();
+        await this.fetchTeachers();
         this.closeModal();
       } else if (response.data.code === 409) {
         this.idError = '该工号已存在，请输入唯一工号！';
@@ -351,6 +352,24 @@ export default {
       } catch (error) {
         console.error('删除教师失败：', error);
         alert('网络错误，删除失败');
+      }
+    },
+
+    async resetPassword(account) {
+      if (confirm(`确定要重置教师 ${account} 的密码吗？重置后密码为 123`)) {
+        try {
+          const response = await axios.put(`http://localhost:3000/api/teacher/${account}/reset-password`, {
+            password: '123'
+          });
+          if (response.data.code === 200) {
+            alert('密码重置成功！');
+          } else {
+            alert('重置失败：' + response.data.message);
+          }
+        } catch (error) {
+          console.error('重置密码失败：', error);
+          alert('网络错误，操作失败');
+        }
       }
     }
   },
@@ -498,6 +517,21 @@ export default {
 
 .edit-btn:hover {
   background-color: #3182ce;
+}
+
+.reset-btn {
+  padding: 4px 8px;
+  background-color: #ed8936;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.reset-btn:hover {
+  background-color: #dd6b20;
 }
 
 .delete-btn {
