@@ -12,6 +12,8 @@ import StudentManagePage from '../StudentManagePage.vue';
 import TeacherManagePage from '../TeacherManagePage.vue';
 import CourseManagePage from '../CourseManagePage.vue';
 import CourseSeek from '../CourseSeek.vue';
+import HomeworkGrade from '../views/HomeworkGrade.vue';
+import HomeworkSubmit from '../views/HomeworkSubmit.vue';
 
 const routes = [
   { path: '/', redirect: '/Entry' },
@@ -27,7 +29,9 @@ const routes = [
   { path: '/teachermanage-page', component: TeacherManagePage },
   { path: '/studentmanage-page', component: StudentManagePage },
   { path: '/coursemanage-page', component: CourseManagePage },
-  { path: '/course-seek', component: CourseSeek }
+  { path: '/course-seek', component: CourseSeek },
+  { path: '/homework/grade/:homeworkId', component: HomeworkGrade },
+  { path: '/homework/submit/:homeworkId', component: HomeworkSubmit }
 ];
 
 const router = createRouter({
