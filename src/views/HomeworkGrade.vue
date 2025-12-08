@@ -206,24 +206,36 @@ export default {
 .header {
   height: 60px;
   background: white;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #ebeef5;
   display: flex;
   align-items: center;
+  justify-content: center; /* Center the content container if needed, or just keep full width */
+  box-shadow: 0 1px 4px rgba(0,21,41,0.08);
+  z-index: 10;
+}
+
+.header-content {
+  width: 100%;
+  max-width: 1400px;
   padding: 0 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
 }
 
 .back-btn {
   margin-right: 20px;
   border: none;
   background: none;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
-  color: #666;
+  color: #606266;
+  display: flex;
+  align-items: center;
+  transition: color 0.3s;
 }
 
 .back-btn:hover {
-  color: #333;
+  color: #409eff;
 }
 
 .content-wrapper {
@@ -232,52 +244,60 @@ export default {
   overflow: hidden;
   padding: 20px;
   gap: 20px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .student-list-panel {
-  width: 300px;
+  width: 320px;
   background: white;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e0e0e0;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
 }
 
 .list-header {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
+  padding: 16px 20px;
+  border-bottom: 1px solid #ebeef5;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: #fff;
+  border-radius: 8px 8px 0 0;
 }
 
 .list-header h3 {
   margin: 0;
   font-size: 16px;
+  color: #303133;
 }
 
 .student-list {
   flex: 1;
   overflow-y: auto;
+  padding: 8px 0;
 }
 
 .student-item {
-  padding: 12px 15px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 20px;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background 0.2s;
+  transition: all 0.3s;
+  border-left: 3px solid transparent;
 }
 
 .student-item:hover {
-  background: #f9fafb;
+  background: #f5f7fa;
 }
 
 .student-item.active {
-  background: #e6f7ff;
-  border-left: 4px solid #1890ff;
+  background: #ecf5ff;
+  border-left-color: #409eff;
 }
 
 .stu-info {
@@ -287,107 +307,172 @@ export default {
 
 .stu-name {
   font-weight: 500;
-  color: #333;
+  color: #303133;
+  font-size: 15px;
 }
 
 .stu-id {
-  font-size: 12px;
-  color: #999;
+  font-size: 13px;
+  color: #909399;
+  margin-top: 4px;
 }
 
 .grade-panel {
   flex: 1;
   background: white;
   border-radius: 8px;
-  border: 1px solid #e0e0e0;
-  padding: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  padding: 30px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .submission-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.stu-detail h3 {
+  margin: 0 0 8px 0;
+  color: #303133;
+  font-size: 20px;
+}
+
+.submit-time {
+  color: #909399;
+  font-size: 13px;
 }
 
 .status-large {
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-weight: bold;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.submission-content h4 {
+  margin: 0 0 12px 0;
+  color: #606266;
+  font-size: 16px;
 }
 
 .content-box {
   background: #f8f9fa;
-  padding: 20px;
-  border-radius: 6px;
-  border: 1px solid #eee;
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
   min-height: 200px;
   white-space: pre-wrap;
   margin-bottom: 30px;
+  color: #303133;
+  line-height: 1.6;
+  font-size: 15px;
 }
 
 .grading-form {
   background: #fff;
-  padding: 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  padding: 24px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.02);
+}
+
+.grading-form h4 {
+  margin: 0 0 20px 0;
+  color: #303133;
+  font-size: 18px;
 }
 
 .form-row {
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 .form-row label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-weight: 500;
+  color: #606266;
 }
 
 .score-input {
-  width: 100px;
-  padding: 8px;
-  border: 1px solid #ccc;
+  width: 120px;
+  padding: 10px 15px;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.score-input:focus,
+.comment-input:focus {
+  border-color: #409eff;
+  outline: none;
 }
 
 .comment-input {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
+  padding: 12px;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
   box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.action-row {
+  margin-top: 24px;
+  text-align: right;
 }
 
 .save-btn {
-  background: #1890ff;
+  background: #409eff;
   color: white;
   border: none;
-  padding: 10px 25px;
+  padding: 12px 30px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s;
 }
 
 .save-btn:hover {
-  background: #40a9ff;
+  background: #66b1ff;
+  transform: translateY(-1px);
 }
 
-.status-un { color: #ff4d4f; }
-.status-wait { color: #1890ff; }
-.status-done { color: #52c41a; }
-.status-un.status-badge { background: #fff1f0; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
-.status-wait.status-badge { background: #e6f7ff; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
-.status-done.status-badge { background: #f6ffed; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.status-un { color: #f56c6c; }
+.status-wait { color: #e6a23c; } /* Changed to orange for waiting */
+.status-done { color: #67c23a; }
+
+.status-un.status-badge { background: #fef0f0; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+.status-wait.status-badge { background: #fdf6ec; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+.status-done.status-badge { background: #f0f9eb; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+
+.status-large.status-un { background: #fef0f0; border: 1px solid #fde2e2; }
+.status-large.status-wait { background: #fdf6ec; border: 1px solid #faecd8; }
+.status-large.status-done { background: #f0f9eb; border: 1px solid #e1f3d8; }
 
 .empty-state {
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: #909399;
   font-size: 16px;
+}
+
+.empty-tip {
+  color: #909399;
+  text-align: center;
+  padding: 40px 0;
 }
 </style>
