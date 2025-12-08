@@ -1068,9 +1068,6 @@ export default {
   background: #a0aec0;
   cursor: not-allowed;
 }
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 .course-teacher {
   font-size: 12px;
