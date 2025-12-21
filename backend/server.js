@@ -297,6 +297,19 @@ app.post('/api/student/drop-course', async (req, res) => {
       await connection.rollback();
       return res.status(400).json({ code: 400, message: '未选该课程' });
     }
+
+    // Check if course has ended
+    const [courseRows] = await connection.execute(
+      'SELECT enddate FROM course WHERE id = ?',
+      [courseId]
+    );
+    if (courseRows.length > 0) {
+       if (new Date() > new Date(courseRows[0].enddate)) {
+          await connection.rollback();
+          return res.status(400).json({ code: 400, message: '课程已结课，无法退课' });
+       }
+    }
+
     await connection.execute(
       'DELETE FROM student_course WHERE studentaccount = ? AND courseid = ?',
       [studentAccount, courseId]
@@ -580,7 +593,7 @@ app.post('/api/courses/by-ids', async (req, res) => {
     connection = await mysql.createConnection(dbConfig);
     const placeholders = courseIds.map(() => '?').join(',');
     const [courses] = await connection.execute(
-      `SELECT id, name, teacheraccount, time, startdate, enddate, place, maxstu 
+      `SELECT id, name, teacheraccount, time, startdate, enddate, place, maxstu, testratio 
        FROM course WHERE id IN (${placeholders})`,
       courseIds
     );
@@ -1096,6 +1109,59 @@ app.post('/api/admin/login', async (req, res) => {
   }
 });
 
+// 计算并返回课程中所有学生的平时成绩（不更新数据库，仅计算）
+app.post('/api/course/grades/calculate-regular', async (req, res) => {
+  const { course_id } = req.body;
+  
+  let connection;
+  try {
+    connection = await mysql.createConnection(dbConfig);
+    
+    // 1. 获取该课程作业总数
+    const [hwCountRows] = await connection.execute(
+      'SELECT COUNT(*) as count FROM homework WHERE course_id = ?',
+      [course_id]
+    );
+    const hwCount = hwCountRows[0].count;
+    
+    // 2. 获取所有学生列表
+    const [students] = await connection.execute(
+      'SELECT studentaccount FROM student_course WHERE courseid = ?',
+      [course_id]
+    );
+    
+    const regularScores = {};
+    
+    for (const stu of students) {
+      let regularScore = 0;
+      
+      if (hwCount === 0) {
+        regularScore = 100;
+      } else {
+        const [scoreRows] = await connection.execute(
+          `SELECT SUM(IFNULL(score, 0)) as total_score
+           FROM student_homework sh
+           JOIN homework h ON sh.homework_id = h.id
+           WHERE sh.student_id = ? AND h.course_id = ?`,
+          [stu.studentaccount, course_id]
+        );
+        
+        const totalScore = parseFloat(scoreRows[0].total_score || 0);
+        regularScore = totalScore / hwCount;
+      }
+      
+      regularScores[stu.studentaccount] = parseFloat(regularScore.toFixed(2));
+    }
+    
+    await connection.end();
+    res.json({ code: 200, data: regularScores });
+    
+  } catch (error) {
+    console.error('计算平时成绩失败：', error);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
 // 教师录入期末成绩并计算总评
 app.post('/api/course/grades/finalize', async (req, res) => {
   const { course_id, student_scores } = req.body; // student_scores: [{ student_id, exam_score }]
@@ -1219,11 +1285,18 @@ app.get('/api/teacher/course/:id/stats', async (req, res) => {
   try {
     const connection = await mysql.createConnection(dbConfig);
     
+    // Get course info for testratio
+    const [courseRows] = await connection.execute(
+      'SELECT testratio FROM course WHERE id = ?',
+      [id]
+    );
+    const testRatio = courseRows.length > 0 ? (courseRows[0].testratio || 0) : 0;
+
     const [rows] = await connection.execute(
       `SELECT s.name, s.account, sc.score, sc.exam_score, sc.regular_score
        FROM student_course sc
        JOIN student s ON sc.studentaccount = s.account
-       WHERE sc.courseid = ? AND sc.score IS NOT NULL
+       WHERE sc.courseid = ?
        ORDER BY sc.score DESC`,
       [id]
     );
@@ -1238,7 +1311,8 @@ app.get('/api/teacher/course/:id/stats', async (req, res) => {
         data: {
             students: rows,
             avgScore: avgScore,
-            count: rows.length
+            count: rows.length,
+            testRatio: testRatio / 100 // Return as decimal
         } 
     });
   } catch (error) {
@@ -1264,11 +1338,12 @@ app.get('/api/student/:account/department-rank', async (req, res) => {
     }
     const dept = studentRows[0].dept;
 
-    // 2. 获取该院系所有学生的加权平均分
+    // 2. 获取该院系所有学生的加权平均分和综合学分
     const [rows] = await connection.execute(`
       SELECT 
         s.account,
-        SUM(sc.score * c.credit) / SUM(c.credit) as weighted_avg
+        SUM(sc.score * c.credit) / SUM(c.credit) as weighted_avg,
+        SUM( (CASE WHEN sc.score >= 60 THEN (sc.score - 60)/8.0 ELSE 0 END) * c.credit ) / SUM(c.credit) as comp_credit
       FROM student s
       JOIN student_course sc ON s.account = sc.studentaccount
       JOIN course c ON sc.courseid = c.id
@@ -1281,8 +1356,7 @@ app.get('/api/student/:account/department-rank', async (req, res) => {
     // 3. 计算综合学分并排序
     const rankings = rows.map(row => {
       const weightedAvg = parseFloat(row.weighted_avg || 0);
-      // 综合学分 = (加权平均分 - 50) / 10
-      const comprehensiveCredit = (weightedAvg - 50) / 10;
+      const comprehensiveCredit = parseFloat(row.comp_credit || 0);
       return {
         account: row.account,
         weightedAvg: weightedAvg.toFixed(2),
@@ -1303,7 +1377,7 @@ app.get('/api/student/:account/department-rank', async (req, res) => {
       data: {
         rank: myRank,
         totalStudents: rankings.length,
-        comprehensiveCredit: myData ? myData.comprehensiveCredit.toFixed(2) : '0.00',
+        comprehensiveCredit: myData ? myData.comprehensiveCredit.toFixed(4) : '0.0000',
         weightedAvg: myData ? myData.weightedAvg : '0.00'
       }
     });
