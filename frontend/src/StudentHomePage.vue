@@ -261,9 +261,9 @@
                   <td>{{ g.course_name }}</td>
                   <td>{{ g.credit }}</td>
                   <td>{{ g.testratio }}%</td>
-                  <td>{{ g.regular_score || '-' }}</td>
-                  <td>{{ g.exam_score || '-' }}</td>
-                  <td class="final-score">{{ g.score || '-' }}</td>
+                  <td>{{ (g.regular_score !== null && g.regular_score !== undefined) ? g.regular_score : '-' }}</td>
+                  <td>{{ (g.exam_score !== null && g.exam_score !== undefined) ? g.exam_score : '-' }}</td>
+                  <td class="final-score">{{ (g.score !== null && g.score !== undefined) ? g.score : '-' }}</td>
                   <td>{{ g.rank }}</td>
                 </tr>
               </tbody>
@@ -829,12 +829,14 @@ export default {
   text-align: left;
   border-bottom: 1px solid #ebeef5;
   font-size: 14px;
+  color: #000;
+  font-weight: 500;
 }
 
 .grade-table th {
   background-color: #f5f7fa;
-  color: #606266;
-  font-weight: 500;
+  color: #000;
+  font-weight: 700;
 }
 
 .final-score {
@@ -1118,7 +1120,7 @@ export default {
 }
 
 .hw-content {
-  color: #666;
+  color: #333;
   font-size: 14px;
   line-height: 1.6;
   margin-bottom: 15px;
@@ -1127,7 +1129,7 @@ export default {
 
 .hw-meta {
   font-size: 12px;
-  color: #999;
+  color: #333;
   display: flex;
   gap: 20px;
   margin-bottom: 15px;
@@ -1275,8 +1277,9 @@ export default {
 
 .course-teacher {
   font-size: 12px;
-  color: #666;
+  color: #000;
   margin-bottom: 3px;
+  font-weight: 500;
 }
 
 .course-place {

@@ -290,7 +290,7 @@
       <div class="stats-section">
         <h2 class="section-title">课程成绩统计</h2>
         <div class="stats-controls">
-          <select v-model="statsCourseId" class="form-select" @change="fetchCourseStats">
+          <select v-model="statsCourseId" class="form-select" @change="fetchCourseStats" :disabled="isEnteringGrades">
             <option value="">-- 选择课程查看统计 --</option>
             <option v-for="course in teachingCourses" :key="course.id" :value="course.id">
               {{ course.name }}
@@ -326,14 +326,42 @@
                 <td>{{ index + 1 }}</td>
                 <td>{{ stu.name }}</td>
                 <td>{{ stu.account }}</td>
-                <td>{{ stu.regular_score }}</td>
-                <td>{{ stu.exam_score }}</td>
-                <td class="final-score">{{ stu.score }}</td>
+                <td>{{ (stu.regular_score !== null && stu.regular_score !== undefined) ? stu.regular_score : '-' }}</td>
+                <td>
+                  <div v-if="isEnteringGrades">
+                    <input 
+                      type="number" 
+                      v-model.number="stu.tempExamScore" 
+                      class="grade-input"
+                      min="0"
+                      max="100"
+                      placeholder="0-100"
+                      @input="calculateExpectedScore(stu)"
+                    >
+                  </div>
+                  <span v-else>{{ stu.exam_score !== null ? stu.exam_score : '-' }}</span>
+                </td>
+                <td class="final-score">
+                  <span v-if="isEnteringGrades && stu.expectedScore !== undefined" class="expected-score">
+                    {{ stu.expectedScore }} (预期)
+                  </span>
+                  <span v-else>
+                    {{ stu.score !== null ? stu.score : '-' }}
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>
           <div v-if="courseStats.students.length === 0" class="no-stats-tip">
             暂无成绩数据，请先录入期末成绩
+          </div>
+
+          <div class="grade-actions-bottom">
+            <button v-if="!isEnteringGrades" class="action-btn enter-btn" @click="startGradeEntry">录入/修改成绩</button>
+            <div v-else class="edit-actions">
+              <button class="action-btn save-btn" @click="saveGrades">保存</button>
+              <button class="action-btn cancel-btn" @click="cancelGradeEntry">取消</button>
+            </div>
           </div>
         </div>
       </div>
@@ -368,9 +396,9 @@
                   <td>{{ stu.name }}</td>
                   <td>{{ stu.dept }}</td>
                   <td>{{ stu.grade }}</td>
-                  <td>{{ stu.regular_score || '-' }}</td>
-                  <td>{{ stu.exam_score || '-' }}</td>
-                  <td>{{ stu.score || '-' }}</td>
+                  <td>{{ (stu.regular_score !== null && stu.regular_score !== undefined) ? stu.regular_score : '-' }}</td>
+                  <td>{{ (stu.exam_score !== null && stu.exam_score !== undefined) ? stu.exam_score : '-' }}</td>
+                  <td>{{ (stu.score !== null && stu.score !== undefined) ? stu.score : '-' }}</td>
                 </tr>
                 <tr v-if="currentCourseStudents.length === 0">
                   <td colspan="7" class="empty-text">暂无学生选修</td>
@@ -412,6 +440,7 @@ export default {
       // 成绩统计数据
       statsCourseId: '',
       courseStats: null,
+      isEnteringGrades: false,
 
       // 学生名单弹窗数据
       showStudentModal: false,
@@ -733,16 +762,29 @@ export default {
       }
     },
 
+    isCourseEnded(course) {
+      if (!course.enddate) return false;
+      return new Date() > new Date(course.enddate);
+    },
+
     async publishHomework() {
       try {
         const selectedCourse = this.teachingCourses.find(c => c.id === this.selectedCourseId);
-        if (selectedCourse && selectedCourse.startdate) {
-          const now = new Date();
-          const start = new Date(selectedCourse.startdate);
-          if (now < start) {
-            alert(`该课程将于 ${this.formatShowTime(selectedCourse.startdate).split(' ')[0]} 开课，在此之前无法发布作业！`);
-            return;
-          }
+        
+        if (selectedCourse) {
+           if (this.isCourseEnded(selectedCourse)) {
+             alert(`课程 "${selectedCourse.name}" 已于 ${this.formatShowTime(selectedCourse.enddate).split(' ')[0]} 结课，无法发布作业！`);
+             return;
+           }
+
+           if (selectedCourse.startdate) {
+             const now = new Date();
+             const start = new Date(selectedCourse.startdate);
+             if (now < start) {
+               alert(`该课程将于 ${this.formatShowTime(selectedCourse.startdate).split(' ')[0]} 开课，在此之前无法发布作业！`);
+               return;
+             }
+           }
         }
 
         const formattedDdl = this.homeworkForm.deadline.replace('T', ' ') + ':00';
@@ -802,16 +844,116 @@ export default {
     async fetchCourseStats() {
       if (!this.statsCourseId) {
         this.courseStats = null;
+        this.isEnteringGrades = false;
         return;
       }
       try {
         const res = await axios.get(`http://localhost:3000/api/teacher/course/${this.statsCourseId}/stats`);
         if (res.data.code === 200) {
           this.courseStats = res.data.data;
+          // Store test ratio for calculation
+          const course = this.teachingCourses.find(c => c.id === this.statsCourseId);
+          if (course && this.courseStats) {
+            this.courseStats.testRatio = (course.testratio || 0) / 100;
+          }
+          this.isEnteringGrades = false; // 重置录入状态
         }
       } catch (err) {
         console.error('获取成绩统计失败:', err);
         alert('获取统计数据失败');
+      }
+    },
+
+    async startGradeEntry() {
+      if (!this.courseStats || !this.courseStats.students) return;
+      
+      // Calculate regular scores first
+      try {
+        const res = await axios.post(`http://localhost:3000/api/course/grades/calculate-regular`, {
+          course_id: this.statsCourseId
+        });
+        
+        if (res.data.code === 200) {
+          const regularScores = res.data.data; // Map of student_account -> regular_score
+          
+          this.courseStats.students.forEach(stu => {
+            // Update regular score
+            if (regularScores[stu.account] !== undefined) {
+              stu.regular_score = regularScores[stu.account];
+            }
+            // Initialize temp exam score
+            stu.tempExamScore = stu.exam_score !== null ? stu.exam_score : '';
+            this.calculateExpectedScore(stu);
+          });
+          this.isEnteringGrades = true;
+        } else {
+          alert('计算平时成绩失败');
+        }
+      } catch (err) {
+        console.error('计算平时成绩失败:', err);
+        alert('无法自动计算平时成绩，请稍后重试');
+      }
+    },
+
+    calculateExpectedScore(stu) {
+      if (stu.tempExamScore === '' || stu.tempExamScore === null) {
+        stu.expectedScore = undefined;
+        return;
+      }
+      const exam = parseFloat(stu.tempExamScore);
+      const regular = parseFloat(stu.regular_score || 0);
+      const ratio = this.courseStats.testRatio || 0;
+      
+      if (!isNaN(exam)) {
+        stu.expectedScore = Math.round(exam * ratio + regular * (1 - ratio));
+      }
+    },
+
+    cancelGradeEntry() {
+      this.isEnteringGrades = false;
+      this.courseStats.students.forEach(stu => {
+        delete stu.tempExamScore;
+      });
+    },
+
+    async saveGrades() {
+      // 验证数据
+      const scoresToUpdate = [];
+      for (const stu of this.courseStats.students) {
+        const score = stu.tempExamScore;
+        if (score === '' || score === null || score === undefined) continue; // 跳过未输入的
+        
+        if (score < 0 || score > 100) {
+          alert(`学生 ${stu.name} 的成绩必须在 0-100 之间`);
+          return;
+        }
+        scoresToUpdate.push({
+          student_id: stu.account,
+          exam_score: score
+        });
+      }
+
+      if (scoresToUpdate.length === 0) {
+        alert('未检测到有效成绩输入');
+        return;
+      }
+
+      try {
+        const res = await axios.post('http://localhost:3000/api/course/grades/finalize', {
+          course_id: this.statsCourseId,
+          student_scores: scoresToUpdate
+        });
+
+        if (res.data.code === 200) {
+          alert('成绩录入成功，总评已自动更新');
+          this.isEnteringGrades = false;
+          await this.fetchCourseStats(); // 刷新数据
+        } else {
+          alert(res.data.message || '保存失败');
+        }
+      } catch (err) {
+        console.error('保存成绩失败:', err);
+        alert('网络错误，保存失败');
       }
     },
 
@@ -915,6 +1057,16 @@ export default {
   margin-bottom: 20px;
 }
 
+.stats-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+}
+
 .teacher-info {
   font-size: 16px;
   font-weight: 600;
@@ -940,7 +1092,75 @@ export default {
   gap: 10px;
 }
 
-.view-btn {
+.grade-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.grade-input {
+  width: 80px;
+  padding: 5px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.grade-input:focus {
+  border-color: #409eff;
+  outline: none;
+  background-color: #ecf5ff;
+}
+
+.stats-table td {
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+
+.action-btn {
+  padding: 6px 15px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: white;
+  transition: all 0.3s;
+}
+
+.enter-btn {
+  background-color: #409eff;
+}
+
+.enter-btn:hover {
+  background-color: #66b1ff;
+}
+
+.save-btn {
+  background-color: #67c23a;
+}
+
+.save-btn:hover {
+  background-color: #85ce61;
+}
+
+.cancel-btn {
+  background-color: #909399;
+}
+
+.cancel-btn:hover {
+  background-color: #a6a9ad;
+}
+
+.expected-score {
+  color: #333;
+  font-size: 13px;
+  font-weight: 600;
+}
+  .view-btn {
   background-color: #38a169;
   color: white;
   border: none;
@@ -1145,8 +1365,9 @@ export default {
 
 .course-info p {
   margin: 5px 0;
-  color: #666;
+  color: #333;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .view-btn {
@@ -1208,12 +1429,13 @@ export default {
   padding: 12px;
   text-align: left;
   border-bottom: 1px solid #ebeef5;
-  color: #333;
+  color: #000;
+  font-weight: 500;
 }
 
 .student-table th {
   background-color: #f5f7fa;
-  color: #333;
+  color: #000;
   font-weight: 700;
   position: sticky;
   top: 0;
@@ -1689,10 +1911,16 @@ export default {
   border-bottom: 1px solid #ebeef5;
 }
 
+.stats-table td {
+  color: #000 !important;
+  font-weight: 600 !important;
+  font-size: 15px;
+}
+
 .stats-table th {
   background-color: #f5f7fa;
-  color: #606266;
-  font-weight: 500;
+  color: #000;
+  font-weight: 700;
 }
 
 .no-stats-tip {
