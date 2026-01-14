@@ -1,7 +1,11 @@
 <template>
   <div class="login-container">
     <div class="login-card">
+      <div class="back-btn" @click="goBack">
+        <span>← 返回</span>
+      </div>
       <div class="login-header">
+        <div class="header-number">03</div>
         <h2>管理员登录</h2>
         <p>请输入工号和密码登录系统</p>
       </div>
@@ -41,6 +45,9 @@ export default {
     };
   },
   methods: {
+    goBack() {
+      this.$router.push('/Entry');
+    },
     async handleLogin() {
       if (!this.account || !this.password) {
         alert('工号和密码不能为空');
@@ -80,33 +87,62 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #0d7a3d 0%, #1a9d4f 50%, #2db563 100%);
   overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
 }
 
 .login-card {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background-color: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  padding: 30px 25px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 40px 35px;
   box-sizing: border-box;
+  animation: slideUp 0.5s ease;
+}
+
+.back-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  transition: color 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.back-btn:hover {
+  color: #2db563;
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 35px;
+  margin-top: 10px;
+}
+
+.header-number {
+  font-size: 72px;
+  font-weight: 300;
+  color: rgba(45, 181, 99, 0.15);
+  margin-bottom: 10px;
+  line-height: 1;
+  display: block;
 }
 
 .login-header h2 {
   color: #333;
   margin: 0 0 10px 0;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 600;
 }
 
@@ -114,6 +150,17 @@ export default {
   color: #666;
   margin: 0;
   font-size: 14px;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .login-form {
@@ -138,14 +185,14 @@ export default {
 
 .form-input:focus {
   outline: none;
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+  border-color: #2db563;
+  box-shadow: 0 0 0 3px rgba(45, 181, 99, 0.1);
 }
 
 .login-btn {
   width: 100%;
   padding: 13px;
-  background-color: #42b983;
+  background-color: #2db563;
   color: white;
   border: none;
   border-radius: 6px;
@@ -157,6 +204,6 @@ export default {
 }
 
 .login-btn:hover {
-  background-color: #359e6d;
+  background-color: #25a050;
 }
 </style>

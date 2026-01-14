@@ -75,22 +75,35 @@ const handleRegister = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #0d7a3d 0%, #1a9d4f 50%, #2db563 100%);
   overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
 }
 
 .register-card {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background-color: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  padding: 30px 25px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 40px 35px;
   box-sizing: border-box;
+  animation: slideUp 0.5s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .register-header {
@@ -133,14 +146,14 @@ const handleRegister = async () => {
 
 .form-input:focus {
   outline: none;
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+  border-color: #0d7a3d;
+  box-shadow: 0 0 0 3px rgba(13, 122, 61, 0.1);
 }
 
 .register-btn {
   width: 100%;
   padding: 13px;
-  background-color: #42b983;
+  background-color: #0d7a3d;
   color: white;
   border: none;
   border-radius: 6px;
@@ -152,7 +165,7 @@ const handleRegister = async () => {
 }
 
 .register-btn:hover {
-  background-color: #359e6d;
+  background-color: #0a5f2e;
 }
 
 .login-link {
@@ -163,7 +176,7 @@ const handleRegister = async () => {
 }
 
 .link {
-  color: #42b983;
+  color: #0d7a3d;
   text-decoration: none;
   margin-left: 5px;
 }

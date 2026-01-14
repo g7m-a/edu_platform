@@ -73,6 +73,7 @@
             <td>{{ student.grade }}</td>
             <td class="operate-btn-group">
               <button @click="openEditModal(student)" class="edit-btn">编辑</button>
+              <button @click="resetPassword(student.account)" class="reset-btn">重置密码</button>
               <button @click="deleteStudent(student.account)" class="delete-btn">删除</button>
             </td>
           </tr>
@@ -279,7 +280,7 @@ export default {
           );
           if (response.data.code === 200) {
             alert('编辑成功！');
-            this.fetchStudents();
+            await this.fetchStudents();
             this.closeModal();
           } else {
             alert('编辑失败：' + response.data.message);
@@ -291,7 +292,7 @@ export default {
           );
           if (response.data.code === 200) {
             alert('新增成功！');
-            this.fetchStudents();
+            await this.fetchStudents();
             this.closeModal();
           } else {
             if (response.data.code === 409) {
@@ -325,6 +326,24 @@ export default {
         }
       }
     },
+
+    async resetPassword(account) {
+      if (confirm(`确定要重置学生 ${account} 的密码吗？重置后密码为 123`)) {
+        try {
+          const response = await axios.put(`http://localhost:3000/api/student/${account}/reset-password`, {
+            password: '123'
+          });
+          if (response.data.code === 200) {
+            alert('密码重置成功！');
+          } else {
+            alert('重置失败：' + response.data.message);
+          }
+        } catch (error) {
+          console.error('重置密码失败：', error);
+          alert('网络错误，操作失败');
+        }
+      }
+    },
   },
 };
 </script>
@@ -336,15 +355,22 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #f5f7fa;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
   overflow: auto;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 10px 10px 10px 10px;
+  margin-bottom: 20px;
+  padding: 20px 25px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid #0d7a3d;
 }
 
 .page-header h2 {
@@ -356,7 +382,7 @@ export default {
 
 .add-btn {
   padding: 8px 16px;
-  background-color: #42b983;
+  background-color: #0d7a3d;
   color: white;
   border: none;
   border-radius: 6px;
@@ -375,9 +401,10 @@ export default {
   flex-wrap: wrap;
   background-color: #fff;
   padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   margin-bottom: 20px;
+  border-top: 3px solid #0d7a3d;
 }
 
 .filter-item {
@@ -403,15 +430,16 @@ export default {
 
 .filter-input:focus {
   outline: none;
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+  border-color: #0d7a3d;
+  box-shadow: 0 0 0 3px rgba(13, 122, 61, 0.1);
 }
 
 .table-container {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   overflow: hidden;
+  border-top: 3px solid #0d7a3d;
 }
 
 .student-table {
@@ -451,7 +479,7 @@ export default {
 
 .edit-btn {
   padding: 4px 8px;
-  background-color: #4299e1;
+  background-color: #1a9d4f;
   color: white;
   border: none;
   border-radius: 4px;
@@ -461,7 +489,7 @@ export default {
 }
 
 .edit-btn:hover {
-  background-color: #3182ce;
+  background-color: #15803d;
 }
 
 .delete-btn {
@@ -477,6 +505,21 @@ export default {
 
 .delete-btn:hover {
   background-color: #c53030;
+}
+
+.reset-btn {
+  padding: 4px 8px;
+  background-color: #ed8936;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.reset-btn:hover {
+  background-color: #dd6b20;
 }
 
 .modal-mask {
@@ -556,8 +599,8 @@ export default {
 
 .form-control:focus {
   outline: none;
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+  border-color: #0d7a3d;
+  box-shadow: 0 0 0 3px rgba(13, 122, 61, 0.1);
 }
 
 .form-control:disabled {
@@ -596,7 +639,7 @@ export default {
 
 .confirm-btn {
   padding: 8px 16px;
-  background-color: #42b983;
+  background-color: #0d7a3d;
   color: white;
   border: none;
   border-radius: 6px;

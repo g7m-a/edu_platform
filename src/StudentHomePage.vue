@@ -7,6 +7,7 @@
         </div>
         <div class="function-buttons">
           <button @click="toCourseSeek" class="seek-btn">查询课程信息</button>
+          <button @click="handleLogout" class="logout-btn">退出登录</button>
         </div>
       </header>
 
@@ -193,7 +194,7 @@
           <div v-for="hw in homeworkList" :key="hw.sh_id" class="homework-card">
             <div class="hw-header">
               <span class="hw-course">{{ hw.course_name }}</span>
-              <span class="hw-status" :class="getStatusClass(hw.status)">{{ getStatusText(hw.status) }}</span>
+              <span class="hw-status" :class="getStatusClass(hw.status)">{{ getStatusText(hw) }}</span>
             </div>
             <h3 class="hw-title">{{ hw.title }}</h3>
             <p class="hw-content">{{ hw.content }}</p>
@@ -213,6 +214,8 @@
                 <button 
                   v-if="hw.status === 0 || hw.status === 1" 
                   class="action-btn submit-btn"
+                  :class="{ 'disabled-btn': isOverdue(hw.ddl) }"
+                  :disabled="isOverdue(hw.ddl)"
                   @click="goToSubmitPage(hw)"
                 >
                   {{ hw.status === 0 ? '提交作业' : '修改提交' }}
@@ -225,6 +228,56 @@
           </div>
         </div>
       </div>
+
+      <!-- 成绩部分 -->
+      <div class="grade-section">
+        <h2 class="section-title">我的成绩</h2>
+        <div v-if="loadingGrades" class="state-container loading">
+          <span>加载成绩中...</span>
+        </div>
+        <div v-else-if="grades.length === 0" class="state-container empty">
+          <span>暂无成绩记录</span>
+        </div>
+        <div v-else class="grade-content">
+          <div class="grade-table-wrapper">
+            <div class="grade-summary">
+              <div class="summary-item">加权平均分：<strong>{{ weightedAverage }}</strong></div>
+              <div class="summary-item">综合学分：<strong>{{ rankingData.comprehensiveCredit }}</strong></div>
+              <div class="summary-item">院系排名：<strong>{{ rankingData.rank }} / {{ rankingData.totalStudents }}</strong></div>
+            </div>
+            <table class="grade-table">
+              <thead>
+                <tr>
+                  <th>课程</th>
+                  <th>学分</th>
+                  <th>考试占比</th>
+                  <th>平时分</th>
+                  <th>考试分</th>
+                  <th>总评</th>
+                  <th>排名</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(g, index) in grades" :key="index">
+                  <td>{{ g.course_name }}</td>
+                  <td>{{ g.credit }}</td>
+                  <td>{{ g.testratio }}%</td>
+                  <td>{{ (g.regular_score !== null && g.regular_score !== undefined) ? g.regular_score : '-' }}</td>
+                  <td>{{ (g.exam_score !== null && g.exam_score !== undefined) ? g.exam_score : '-' }}</td>
+                  <td class="final-score">{{ (g.score !== null && g.score !== undefined) ? g.score : '-' }}</td>
+                  <td>{{ g.rank }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="grade-chart-wrapper">
+            <h3>成绩分布</h3>
+            <div class="chart-container">
+              <Pie :data="chartData" :options="chartOptions" />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -232,8 +285,15 @@
 <script>
 import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
+import { Pie } from 'vue-chartjs'
+
+ChartJS.register(ArcElement, Tooltip, Legend)
 
 export default {
+  components: {
+    Pie
+  },
   data() {
     return {
       student: null,
@@ -248,6 +308,10 @@ export default {
       // 作业相关数据
       homeworkList: [],
       loadingHomework: false,
+
+      // 成绩相关数据
+      grades: [],
+      loadingGrades: false,
       
       morningSlots: [
         { index: 1, label: '第1节', time: '08:00-08:45' },
@@ -266,7 +330,13 @@ export default {
         { index: 10, label: '第10节', time: '19:25-20:10' },
         { index: 11, label: '第11节', time: '20:20-21:05' },
         { index: 12, label: '第12节', time: '21:15-22:00' }
-      ]
+      ],
+      rankingData: {
+        rank: 0,
+        totalStudents: 0,
+        comprehensiveCredit: '0.00',
+        weightedAvg: '0.00'
+      }
     };
   },
   setup() {
@@ -358,6 +428,54 @@ export default {
         }
       }
       return conflicts;
+    },
+
+    weightedAverage() {
+      if (!this.grades.length) return 0;
+      let totalScore = 0;
+      let totalCredit = 0;
+      this.grades.forEach(g => {
+        if (g.score !== null) {
+          totalScore += g.score * g.credit;
+          totalCredit += g.credit;
+        }
+      });
+      return totalCredit ? (totalScore / totalCredit).toFixed(2) : 0;
+    },
+
+    gradeDistribution() {
+      let dist = { excellent: 0, good: 0, medium: 0, pass: 0, fail: 0 };
+      this.grades.forEach(g => {
+        if (g.score >= 90) dist.excellent++;
+        else if (g.score >= 80) dist.good++;
+        else if (g.score >= 70) dist.medium++;
+        else if (g.score >= 60) dist.pass++;
+        else dist.fail++;
+      });
+      return dist;
+    },
+
+    chartData() {
+      return {
+        labels: ['优秀(90-100)', '良好(80-89)', '中等(70-79)', '及格(60-69)', '不及格(<60)'],
+        datasets: [{
+          backgroundColor: ['#67C23A', '#409EFF', '#E6A23C', '#909399', '#F56C6C'],
+          data: [
+            this.gradeDistribution.excellent,
+            this.gradeDistribution.good,
+            this.gradeDistribution.medium,
+            this.gradeDistribution.pass,
+            this.gradeDistribution.fail
+          ]
+        }]
+      }
+    },
+
+    chartOptions() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false
+      }
     }
   },
   watch: {
@@ -424,28 +542,39 @@ export default {
     },
     
     getCourseByTime(weekday, slotIndex) {
+      // 获取当前周该星期的具体日期
+      const dayIndex = this.weekdays.indexOf(weekday);
+      if (dayIndex === -1) return [];
+
+      const currentDayDate = new Date(this.getWeekStartDate(this.currentWeek));
+      currentDayDate.setDate(currentDayDate.getDate() + dayIndex);
+      currentDayDate.setHours(0, 0, 0, 0);
+
+      const currentDayStr = this.formatDate(currentDayDate);
+
       const matched = this.filteredTimetable.filter(course => {
+        // 检查具体日期是否在课程起止时间内
+        const courseStart = new Date(course.startDate);
+        const courseEnd = new Date(course.endDate);
+        
+        const startStr = this.formatDate(courseStart);
+        const endStr = this.formatDate(courseEnd);
+
+        if (currentDayStr < startStr || currentDayStr > endStr) {
+          return false;
+        }
+
         const hasMatch = course.timeList.some(item => {
           const weekMatch = item.week === weekday;
           const startClass = item.classes?.[0] || 0;
           const endClass = item.classes?.[1] || 0;
           const classMatch = startClass <= slotIndex && slotIndex <= endClass;
           
-          if (weekMatch && classMatch) {
-            console.log(`课程[${course.name}]匹配成功:`, 
-              '星期:', weekday, '当前节次:', slotIndex, 
-              '课程节次范围:', `${startClass}-${endClass}`,
-              '课程时间项:', item
-            );
-          }
           return weekMatch && classMatch;
         });
         return hasMatch;
       });
       
-      console.log(`[${weekday}第${slotIndex}节]匹配课程(${matched.length}门):`, 
-        matched.map(c => c.name)
-      );
       return matched;
     },
     
@@ -525,9 +654,45 @@ export default {
       }
     },
 
-    getStatusText(status) {
+    async fetchGrades() {
+      if (!this.student?.account) return;
+      this.loadingGrades = true;
+      try {
+        const res = await axios.get(`http://localhost:3000/api/student/${this.student.account}/grades`);
+        if (res.data.code === 200) {
+          this.grades = res.data.data || [];
+        }
+      } catch (err) {
+        console.error('获取成绩失败:', err);
+      } finally {
+        this.loadingGrades = false;
+      }
+    },
+
+    async fetchRanking() {
+      if (!this.student?.account) return;
+      try {
+        const res = await axios.get(`http://localhost:3000/api/student/${this.student.account}/department-rank`);
+        if (res.data.code === 200) {
+          this.rankingData = res.data.data;
+        }
+      } catch (err) {
+        console.error('获取排名失败:', err);
+      }
+    },
+
+    getStatusText(hw) {
       const map = { 0: '未提交', 1: '已提交', 2: '已批改' };
-      return map[status] || '未知';
+      let text = map[hw.status] || '未知';
+      if (this.isOverdue(hw.ddl) && hw.status !== 2) {
+        text += ' (已截止)';
+      }
+      return text;
+    },
+
+    isOverdue(ddl) {
+      if (!ddl) return false;
+      return new Date() > new Date(ddl);
     },
 
     getStatusClass(status) {
@@ -549,6 +714,13 @@ export default {
 
     goToSubmitPage(homework) {
       this.router.push(`/homework/submit/${homework.sh_id}`);
+    },
+
+    handleLogout() {
+      if (confirm('确定要退出登录吗？')) {
+        localStorage.removeItem('studentInfo');
+        this.$router.push('/Entry');
+      }
     }
   },
   mounted() {
@@ -562,6 +734,8 @@ export default {
         this.calculateCurrentWeek();
         this.fetchSelectedCourses();
         this.fetchHomeworkList(); // 加载作业
+        this.fetchGrades(); // 加载成绩
+        this.fetchRanking(); // 加载排名
       } else {
         console.log('localStorage中无studentInfo');
         alert('请先登录');
@@ -583,7 +757,7 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #f5f7fa;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
   overflow: auto;
   padding: 20px;
   box-sizing: border-box;
@@ -595,11 +769,100 @@ export default {
   width: 100%;
 }
 
+.grade-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
+  padding: 24px;
+  margin-top: 20px;
+  border-top: 3px solid #0d7a3d;
+}
+
+.grade-content {
+  display: flex;
+  gap: 30px;
+}
+
+.grade-table-wrapper {
+  flex: 2;
+}
+
+.grade-chart-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-left: 1px solid #ebeef5;
+  padding-left: 30px;
+}
+
+.grade-chart-wrapper h3 {
+  margin: 0 0 20px 0;
+  color: #606266;
+  font-size: 16px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 300px;
+}
+
+.grade-summary {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.summary-item {
+  font-size: 16px;
+  color: #303133;
+}
+
+.summary-item strong {
+  color: #0d7a3d;
+  font-size: 20px;
+  margin-left: 5px;
+}
+
+.grade-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.grade-table th, .grade-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 14px;
+  color: #000;
+  font-weight: 500;
+}
+
+.grade-table th {
+  background-color: #f5f7fa;
+  color: #000;
+  font-weight: 700;
+}
+
+.final-score {
+  font-weight: bold;
+  color: #0d7a3d;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding: 20px 25px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid #0d7a3d;
 }
 
 .student-info {
@@ -608,9 +871,19 @@ export default {
   color: #333;
 }
 
+.action-btn.disabled-btn {
+  background-color: #909399;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.action-btn.disabled-btn:hover {
+  background-color: #909399;
+}
+
 .seek-btn {
   padding: 8px 16px;
-  background-color: #4299e1;
+  background-color: #0d7a3d;
   color: white;
   border: none;
   border-radius: 6px;
@@ -620,7 +893,23 @@ export default {
 }
 
 .seek-btn:hover {
-  background-color: #3182ce;
+  background-color: #0a5f2e;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  margin-left: 10px;
+}
+
+.logout-btn:hover {
+  background-color: #dc2626;
 }
 
 .timetable-header-group {
@@ -660,8 +949,8 @@ export default {
 }
 
 .week-btn:not(:disabled):hover {
-  border-color: #4299e1;
-  color: #4299e1;
+  border-color: #0d7a3d;
+  color: #0d7a3d;
 }
 
 .week-input-group {
@@ -692,11 +981,12 @@ export default {
 
 .state-container {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   padding: 40px 0;
   text-align: center;
   margin-bottom: 20px;
+  border-top: 3px solid #0d7a3d;
 }
 
 .loading span {
@@ -713,10 +1003,11 @@ export default {
 
 .table-container {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   margin-bottom: 20px;
+  border-top: 3px solid #0d7a3d;
 }
 
 .timetable-grid {
@@ -799,18 +1090,19 @@ export default {
 }
 
 .course-item {
-  background-color: #e6f7ff;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
   border-radius: 6px;
   padding: 8px;
   margin-bottom: 8px;
   font-size: 14px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(13, 122, 61, 0.1);
   position: relative;
+  border-left: 3px solid #0d7a3d;
 }
 
 .course-name {
   font-weight: 600;
-  color: #1a73e8;
+  color: #0d7a3d;
   margin-bottom: 4px;
   white-space: nowrap;
 }
@@ -825,9 +1117,16 @@ export default {
 .homework-card {
   background: white;
   padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  border: 1px solid #eee;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #1a9d4f;
+  transition: all 0.3s ease;
+}
+
+.homework-card:hover {
+  box-shadow: 0 4px 16px rgba(13, 122, 61, 0.12);
+  transform: translateY(-2px);
 }
 
 .hw-header {
@@ -851,7 +1150,7 @@ export default {
 }
 
 .status-unsubmitted { color: #e53e3e; background: #fff5f5; }
-.status-submitted { color: #3182ce; background: #ebf8ff; }
+.status-submitted { color: #1a9d4f; background: #f0fdf4; }
 .status-graded { color: #38a169; background: #f0fff4; }
 
 .hw-title {
@@ -861,7 +1160,7 @@ export default {
 }
 
 .hw-content {
-  color: #666;
+  color: #333;
   font-size: 14px;
   line-height: 1.6;
   margin-bottom: 15px;
@@ -870,7 +1169,7 @@ export default {
 
 .hw-meta {
   font-size: 12px;
-  color: #999;
+  color: #333;
   display: flex;
   gap: 20px;
   margin-bottom: 15px;
@@ -919,17 +1218,17 @@ export default {
 }
 
 .submit-btn {
-  background-color: #4299e1;
+  background-color: #0d7a3d;
   color: white;
 }
 
 .submit-btn:hover {
-  background-color: #3182ce;
+  background-color: #0a5f2e;
 }
 
 .submitted-info {
   font-size: 12px;
-  color: #3182ce;
+  color: #1a9d4f;
 }
 
 /* 弹窗样式 */
@@ -983,8 +1282,8 @@ export default {
 
 .form-textarea:focus {
   outline: none;
-  border-color: #4299e1;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  border-color: #0d7a3d;
+  box-shadow: 0 0 0 3px rgba(13, 122, 61, 0.1);
 }
 
 .modal-actions {
@@ -1004,11 +1303,15 @@ export default {
 
 .confirm-btn {
   padding: 8px 20px;
-  background: #4299e1;
+  background: #0d7a3d;
   border: none;
   color: white;
   border-radius: 6px;
   cursor: pointer;
+}
+
+.confirm-btn:hover {
+  background: #0a5f2e;
 }
 
 .confirm-btn:disabled {
@@ -1018,8 +1321,9 @@ export default {
 
 .course-teacher {
   font-size: 12px;
-  color: #666;
+  color: #000;
   margin-bottom: 3px;
+  font-weight: 500;
 }
 
 .course-place {
@@ -1029,9 +1333,10 @@ export default {
 
 .homework-section {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   padding: 20px;
+  border-top: 3px solid #0d7a3d;
 }
 
 .homework-placeholder {

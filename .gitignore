@@ -28,3 +28,21 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# Environment variables and sensitive files
+.env
+.env.local
+.env.*.local
+server/.env
+
+# Uploaded files
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Database files
+*.sql
+*.db
+*.sqlite
+
+# API keys and secrets (already in code, but add for future)
+# Note: Current API keys in server.js should be moved to .env

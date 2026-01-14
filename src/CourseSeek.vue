@@ -202,6 +202,77 @@ export default {
       this.filteredCourses = result;
     },
 
+    // 检查时间段是否重叠
+    isTimeOverlap(classes1, classes2) {
+      const start1 = classes1[0];
+      const end1 = classes1[1];
+      const start2 = classes2[0];
+      const end2 = classes2[1];
+      return start1 <= end2 && end1 >= start2;
+    },
+
+    // 检查日期范围是否重叠
+    isDateRangeOverlap(start1, end1, start2, end2) {
+      // 如果任一课程没有起止日期，认为不冲突（允许选课）
+      if (!start1 || !end1 || !start2 || !end2) {
+        return false;
+      }
+      const s1 = new Date(start1).getTime();
+      const e1 = new Date(end1).getTime();
+      const s2 = new Date(start2).getTime();
+      const e2 = new Date(end2).getTime();
+      // 日期范围重叠：start1 <= end2 && end1 >= start2
+      return s1 <= e2 && e1 >= s2;
+    },
+
+    // 检查课程时间冲突（考虑起止日期）
+    checkCourseTimeConflict(newCourse, selectedCourses) {
+      if (!newCourse.timeList || newCourse.timeList.length === 0) {
+        return null; // 新课程没有时间安排，不冲突
+      }
+
+      for (const newTime of newCourse.timeList) {
+        if (!newTime.week || !newTime.classes || !newTime.classes[0] || !newTime.classes[1]) {
+          continue;
+        }
+
+        for (const selectedCourse of selectedCourses) {
+          // 首先检查课程的有效期是否重叠
+          if (!this.isDateRangeOverlap(
+            newCourse.startdate, newCourse.enddate,
+            selectedCourse.startdate, selectedCourse.enddate
+          )) {
+            continue; // 有效期不重叠，不冲突
+          }
+
+          if (!selectedCourse.timeList || selectedCourse.timeList.length === 0) {
+            continue;
+          }
+
+          for (const selectedTime of selectedCourse.timeList) {
+            if (!selectedTime.week || !selectedTime.classes || !selectedTime.classes[0] || !selectedTime.classes[1]) {
+              continue;
+            }
+
+            // 检查是否同一天且时间段重叠
+            if (newTime.week === selectedTime.week) {
+              if (this.isTimeOverlap(newTime.classes, selectedTime.classes)) {
+                return {
+                  conflict: true,
+                  newCourseName: newCourse.name,
+                  conflictCourseName: selectedCourse.name,
+                  day: newTime.week,
+                  time: `${newTime.classes[0]}-${newTime.classes[1]}节`
+                };
+              }
+            }
+          }
+        }
+      }
+
+      return null; // 无冲突
+    },
+
     // 选课操作（优化：无需刷新学生信息，直接更新 selectedCourseIds）
     async selectCourse(courseId) {
       const course = this.courses.find(c => c.id === courseId);
@@ -215,6 +286,33 @@ export default {
       if (course.currentstu >= course.maxstu) {
         alert('该课程已达最大选课人数，无法选择');
         return;
+      }
+
+      // 检查时间冲突
+      try {
+        // 获取学生已选课程的详细信息（包含时间信息和起止日期）
+        const res = await axios.get(`http://localhost:3000/api/student/${this.student.account}/courses`);
+        if (res.data.code === 200) {
+          const selectedCoursesData = res.data.data || [];
+          
+          // 将已选课程数据转换为包含timeList和起止日期的格式
+          const selectedCourses = selectedCoursesData.map(c => ({
+            ...c,
+            timeList: this.safeParse(c.time), // 解析时间JSON字符串
+            startdate: c.startdate, // 开始日期
+            enddate: c.enddate // 结束日期
+          }));
+          
+          // 检查时间冲突（考虑起止日期）
+          const conflict = this.checkCourseTimeConflict(course, selectedCourses);
+          if (conflict) {
+            alert(`选课失败：时间冲突！\n\n《${conflict.newCourseName}》的${conflict.day} ${conflict.time}与已选课程《${conflict.conflictCourseName}》的时间冲突。\n\n请先退选冲突的课程后再选课。`);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('获取已选课程失败:', error);
+        // 如果获取失败，仍然尝试选课，让后端验证
       }
 
       try {
@@ -292,7 +390,7 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #f5f7fa;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
   overflow: auto;
 }
 
@@ -300,7 +398,12 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 10px 10px 10px 10px;
+  margin-bottom: 20px;
+  padding: 20px 25px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid #0d7a3d;
 }
 
 .page-header h2 {
@@ -316,9 +419,10 @@ export default {
   flex-wrap: wrap;
   background-color: #fff;
   padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   margin-bottom: 20px;
+  border-top: 3px solid #0d7a3d;
 }
 
 .filter-item {
@@ -344,15 +448,16 @@ export default {
 
 .filter-input:focus {
   outline: none;
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+  border-color: #0d7a3d;
+  box-shadow: 0 0 0 3px rgba(13, 122, 61, 0.1);
 }
 
 .table-container {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   overflow: hidden;
+  border-top: 3px solid #0d7a3d;
 }
 
 .course-table {
@@ -392,7 +497,7 @@ export default {
 
 .select-btn {
   padding: 4px 8px;
-  background-color: #4299e1;
+  background-color: #0d7a3d;
   color: white;
   border: none;
   border-radius: 4px;
@@ -407,7 +512,7 @@ export default {
 }
 
 .select-btn:not(:disabled):hover {
-  background-color: #3182ce;
+  background-color: #0a5f2e;
 }
 
 .drop-btn {
